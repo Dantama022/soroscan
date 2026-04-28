@@ -22,3 +22,6 @@ urlpatterns = [
     path("api/meta/db-pool/", db_pool_stats_view, name="db-pool-stats"),
     path("api/ingest/", include("soroscan.ingest.urls")),
 ]
+
+handler404 = 'soroscan.error_handlers.custom_404'
+handler500 = 'soroscan.error_handlers.custom_500'

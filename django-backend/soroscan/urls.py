@@ -22,16 +22,10 @@ from soroscan.ingest.views import audit_trail_view, contract_status, rate_limit_
 from soroscan.ingest.schema import schema
 
 
-def handler404_view(request, exception=None):
-    return JsonResponse({"error": "Not found", "status": 404}, status=404)
+from .error_handlers import custom_404 as handler404_view, custom_500 as handler500_view
 
-
-def handler500_view(request):
-    return JsonResponse({"error": "Internal server error", "status": 500}, status=500)
-
-
-handler404 = handler404_view
-handler500 = handler500_view
+handler404 = 'soroscan.error_handlers.custom_404'
+handler500 = 'soroscan.error_handlers.custom_500'
 
 urlpatterns = [
     # Prometheus metrics — must be unauthenticated; placed before any auth middleware
@@ -61,6 +55,3 @@ urlpatterns = [
 if getattr(settings, "ENABLE_SILK", False):
     urlpatterns += [path("silk/", include("silk.urls", namespace="silk"))]
 
-# Custom error handlers for JSON responses
-handler404 = 'soroscan.error_handlers.custom_404'
-handler500 = 'soroscan.error_handlers.custom_500'
