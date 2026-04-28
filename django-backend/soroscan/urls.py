@@ -41,3 +41,7 @@ urlpatterns = [
 # Silk profiling UI — available only when ENABLE_SILK is set
 if getattr(settings, "ENABLE_SILK", False):
     urlpatterns += [path("silk/", include("silk.urls", namespace="silk"))]
+
+# Custom error handlers for JSON responses
+handler404 = 'soroscan.error_handlers.custom_404'
+handler500 = 'soroscan.error_handlers.custom_500'
