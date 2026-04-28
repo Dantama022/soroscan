@@ -3,6 +3,7 @@ URL configuration for SoroScan project.
 """
 from django.conf import settings
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -15,18 +16,36 @@ from rest_framework_simplejwt.views import (
 )
 
 from soroscan.graphql_views import ThrottledGraphQLView
+from soroscan.health import health_view, readiness_view
+from soroscan.meta_views import db_pool_stats_view
 from soroscan.ingest.views import audit_trail_view, contract_status, rate_limit_analytics_view
 from soroscan.ingest.schema import schema
+
+
+def handler404_view(request, exception=None):
+    return JsonResponse({"error": "Not found", "status": 404}, status=404)
+
+
+def handler500_view(request):
+    return JsonResponse({"error": "Internal server error", "status": 500}, status=500)
+
+
+handler404 = handler404_view
+handler500 = handler500_view
 
 urlpatterns = [
     # Prometheus metrics — must be unauthenticated; placed before any auth middleware
     # that would intercept requests.  django_prometheus.urls exposes GET /metrics.
     path("", include("django_prometheus.urls")),
 
+    path("health/", health_view, name="health"),
+    path("ready/", readiness_view, name="readiness"),
+
     path("admin/", admin.site.urls),
     path("api/audit-trail/", audit_trail_view, name="audit-trail"),
     path("api/contracts/status/", contract_status, name="contract-status"),
     path("api/analytics/rate-limits/", rate_limit_analytics_view, name="rate-limit-analytics"),
+    path("api/meta/db-pool/", db_pool_stats_view, name="db-pool-stats"),
     path("api/ingest/", include("soroscan.ingest.urls")),
     path("graphql/", ThrottledGraphQLView.as_view(schema=schema)),
     # JWT Authentication

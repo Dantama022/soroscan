@@ -1,15 +1,18 @@
 """
 Middleware for request-scoped log context (request_id) and slow query logging.
 """
+import json
 import logging
 import time
 import uuid
 
 from django.conf import settings
 from django.db import connection
+from django.http import JsonResponse
 
 from .log_context import set_request_id
 
+logger = logging.getLogger(__name__)
 slow_query_logger = logging.getLogger("soroscan.slow_queries")
 
 
@@ -20,10 +23,27 @@ class RequestIdMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        request_id = getattr(request, "request_id", None) or uuid.uuid4().hex
+        request_id = request.META.get("HTTP_X_REQUEST_ID") or getattr(request, "request_id", None) or uuid.uuid4().hex
         request.request_id = request_id
         set_request_id(request_id)
-        return self.get_response(request)
+        
+        response = self.get_response(request)
+        response["X-Request-ID"] = request_id
+        
+        if response.status_code >= 400 and response.get("Content-Type", "").startswith("application/json"):
+            if not getattr(response, "streaming", False):
+                try:
+                    data = json.loads(response.content)
+                    if isinstance(data, dict):
+                        data["request_id"] = request_id
+                        new_content = json.dumps(data).encode("utf-8")
+                        response.content = new_content
+                        if "Content-Length" in response:
+                            response["Content-Length"] = str(len(new_content))
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+                    
+        return response
 
 
 class ReverseProxyFixedIPMiddleware:
@@ -90,4 +110,45 @@ class SlowQueryMiddleware:
             for name, value in headers.items():
                 response[name] = value
 
+        return response
+
+class RequestBodySizeMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # We check this at the very beginning of the __call__
+        if request.method == "POST":
+            max_size = getattr(settings, "MAX_REQUEST_BODY_SIZE", 10485760)
+            try:
+                content_length = int(request.META.get('CONTENT_LENGTH', 0))
+                if content_length > max_size:
+                    logger.warning("Payload Too Large: %s bytes", content_length)
+                    return JsonResponse(
+                        {"error": "Payload Too Large", "limit": max_size},
+                        status=413
+                    )
+            except (ValueError, TypeError):
+                pass
+        
+        return self.get_response(request)
+        
+class ApiDeprecationMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        deprecated_endpoints = getattr(settings, "DEPRECATED_ENDPOINTS", {})
+        
+        # Normalize request path: remove leading/trailing slashes
+        norm_request_path = request.path.strip("/")
+        
+        for path, config in deprecated_endpoints.items():
+            # Normalize config path
+            if path.strip("/") == norm_request_path:
+                response["Deprecation"] = "true"
+                response["Sunset"] = config.get("sunset", "")
+                response["Link"] = f'<{config.get("replacement", "")}>; rel="replacement"'
+                break
         return response

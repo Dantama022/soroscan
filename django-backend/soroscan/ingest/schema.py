@@ -22,11 +22,17 @@ from .models import (
     ContractEvent,
     ContractInvocation,
     ContractMetadata,
+    ContractVerification,
     Notification,
     TrackedContract,
     WebhookDeliveryLog,
 )
 from .services.timeline import build_timeline
+from ..graphql_extensions import (
+    GraphQLRateLimitExtension,
+    GraphQLResolverLoggingExtension,
+    log_graphql_resolver,
+)
 
 
 def _get_authenticated_user(info: Info):
@@ -63,12 +69,25 @@ class ContractType:
     deprecation_reason: auto
     event_filter_type: auto
     event_filter_list: strawberry.scalars.JSON
+    metadata: strawberry.scalars.JSON
     created_at: auto
+
+    @strawberry.field
+    def verification_status(self) -> Optional[str]:
+        try:
+            return self.verification.status
+        except ContractVerification.DoesNotExist:
+            return None
 
     @strawberry.field
     def team_id(self) -> Optional[int]:
         tid = getattr(self, "team_id", None)
         return int(tid) if tid is not None else None
+
+    @strawberry.field
+    def organization_id(self) -> Optional[int]:
+        oid = getattr(self, "organization_id", None)
+        return int(oid) if oid is not None else None
 
     @strawberry.field
     def event_count(self) -> int:
@@ -141,6 +160,10 @@ class EventType:
     @strawberry.field
     def contract_name(self) -> str:
         return self.contract.name
+
+    @strawberry.field
+    def transaction_id(self) -> str:
+        return self.tx_hash
 
 
 @strawberry_django.type(ContractInvocation)
@@ -368,9 +391,16 @@ class NotificationType:
 @strawberry.type
 class Query:
     @strawberry.field
-    def contracts(self, is_active: Optional[bool] = None, alias: Optional[str] = None) -> list[ContractType]:
+    def contracts(self, info: Info, is_active: Optional[bool] = None, alias: Optional[str] = None) -> list[ContractType]:
         """Get all tracked contracts. Optionally filter by alias substring. Sorted by alias when set."""
         qs = TrackedContract.objects.select_related("contractmetadata").all()
+        user = _get_authenticated_user(info)
+        if user:
+            qs = qs.filter(
+                Q(owner=user)
+                | Q(team__memberships__user=user)
+                | Q(organization__memberships__user=user)
+            ).distinct()
         if is_active is not None:
             qs = qs.filter(is_active=is_active)
         if alias is not None:
@@ -386,12 +416,25 @@ class Query:
         return qs
 
     @strawberry.field
-    def contract(self, contract_id: str) -> Optional[ContractType]:
+    def contract(self, info: Info, contract_id: str) -> Optional[ContractType]:
         """Get a specific contract by ID."""
+        user = _get_authenticated_user(info)
+        if not user:
+            try:
+                return TrackedContract.objects.select_related("contractmetadata").get(contract_id=contract_id)
+            except TrackedContract.DoesNotExist:
+                return None
         try:
-            return TrackedContract.objects.select_related("contractmetadata").get(contract_id=contract_id)
+            return TrackedContract.objects.select_related("contractmetadata").get(
+                contract_id=contract_id,
+                owner=user,
+            )
         except TrackedContract.DoesNotExist:
-            return None
+            return TrackedContract.objects.select_related("contractmetadata").filter(
+                contract_id=contract_id,
+            ).filter(
+                Q(team__memberships__user=user) | Q(organization__memberships__user=user)
+            ).first()
 
     @strawberry.field
     def contract_metadata(self, contract_id: str) -> Optional[ContractMetadataType]:
@@ -521,6 +564,15 @@ class Query:
             return ContractEvent.objects.get(id=id)
         except ContractEvent.DoesNotExist:
             return None
+
+    @strawberry.field
+    def transaction(self, id: str) -> list[EventType]:
+        """Return cross-contract events grouped by atomic transaction id."""
+        return list(
+            ContractEvent.objects.select_related("contract")
+            .filter(tx_hash=id)
+            .order_by("ledger", "event_index", "id")
+        )
 
     @strawberry.field
     def search_events(self, query: EventSearchQuery) -> list[EventSearchResult]:
@@ -797,6 +849,7 @@ class Mutation:
         name: str,
         description: str = "",
         team_id: Optional[int] = None,
+        metadata: Optional[strawberry.scalars.JSON] = None,
     ) -> ContractType:
         """Register a new contract for indexing."""
         user = _get_authenticated_user(info)
@@ -820,6 +873,7 @@ class Mutation:
             description=description,
             owner=user,
             team=team,
+            metadata=metadata or {},
         )
         return contract
 
@@ -924,6 +978,7 @@ class Mutation:
         alias: Optional[str] = None,
         event_filter_type: Optional[str] = None,
         event_filter_list: Optional[list[str]] = None,
+        metadata: Optional[strawberry.scalars.JSON] = None,
     ) -> Optional[ContractType]:
         """Update a tracked contract."""
         user = _get_authenticated_user(info)
@@ -950,6 +1005,8 @@ class Mutation:
             contract.event_filter_type = event_filter_type
         if event_filter_list is not None:
             contract.event_filter_list = event_filter_list
+        if metadata is not None:
+            contract.metadata = metadata
 
         contract.save()
 
@@ -973,6 +1030,7 @@ class Mutation:
 @strawberry.type
 class Subscription:
     @strawberry.subscription
+    @log_graphql_resolver
     async def notifications(
         self, info: Info
     ) -> AsyncGenerator[NotificationType, None]:
@@ -1030,6 +1088,7 @@ class Subscription:
             await channel_layer.group_discard(group_name, channel_name)
 
     @strawberry.subscription
+    @log_graphql_resolver
     async def contract_events(
         self, info: Info, contract_id: str
     ) -> AsyncGenerator[EventType, None]:
@@ -1083,4 +1142,12 @@ class Subscription:
             await channel_layer.group_discard(group_name, channel_name)
 
 
-schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscription)
+schema = strawberry.Schema(
+    query=Query,
+    mutation=Mutation,
+    subscription=Subscription,
+    extensions=[
+        GraphQLRateLimitExtension,
+        GraphQLResolverLoggingExtension,
+    ],
+)
