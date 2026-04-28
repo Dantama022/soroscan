@@ -16,6 +16,7 @@ def custom_404(request, exception=None):
             'error': 'Not Found',
             'status_code': 404,
             'message': 'The requested resource was not found.',
+            'request_id': getattr(request, 'request_id', None),
         },
         status=404,
         content_type='application/json',
