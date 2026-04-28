@@ -75,6 +75,7 @@ urlpatterns = [
         webhook_receiver_example,
         name="webhook-receiver-example",
     ),
+    path(
         "admin/organization-costs/",
         organization_cost_breakdown_view,
         name="admin-organization-costs",
