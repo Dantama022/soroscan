@@ -13,6 +13,159 @@ from django.utils.text import slugify
 User = get_user_model()
 
 
+class Organization(models.Model):
+    """Top-level tenant boundary for contracts, teams, and members."""
+
+    name = models.CharField(max_length=128)
+    slug = models.SlugField(max_length=160, unique=True, db_index=True)
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="owned_organizations",
+    )
+    settings = models.JSONField(default=dict, blank=True)
+    quota = models.PositiveIntegerField(default=0, help_text="Optional monthly event quota")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base = slugify(self.name) or "organization"
+            slug = base
+            n = 0
+            while Organization.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                n += 1
+                slug = f"{base}-{n}"
+            self.slug = slug
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class OrganizationMembership(models.Model):
+    """Links a user to an organization with RBAC roles."""
+
+    class Role(models.TextChoices):
+        OWNER = "owner", "Owner"
+        ADMIN = "admin", "Admin"
+        MEMBER = "member", "Member"
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="organization_memberships",
+    )
+    role = models.CharField(
+        max_length=16,
+        choices=Role.choices,
+        default=Role.MEMBER,
+    )
+    invited_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_organization_invites",
+    )
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("organization", "user")]
+        ordering = ["-joined_at"]
+
+    def __str__(self):
+        return f"{self.user} @ {self.organization} ({self.role})"
+
+
+class OrganizationBudget(models.Model):
+    """Monthly cost budget configuration per organization."""
+
+    organization = models.OneToOneField(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="budget",
+    )
+    monthly_budget_usd = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Monthly budget ceiling in USD.",
+    )
+    warning_threshold_percent = models.PositiveIntegerField(
+        default=80,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Percent threshold for warning alerts.",
+    )
+    critical_threshold_percent = models.PositiveIntegerField(
+        default=100,
+        validators=[MinValueValidator(1), MaxValueValidator(200)],
+        help_text="Percent threshold for critical alerts.",
+    )
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["organization__name"]
+
+    def __str__(self):
+        return f"Budget({self.organization.name}: ${self.monthly_budget_usd})"
+
+
+class OrganizationCostSnapshot(models.Model):
+    """Monthly cost and usage snapshot for one organization."""
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="cost_snapshots",
+    )
+    month = models.DateField(
+        help_text="Month bucket represented by first day of the month (UTC).",
+    )
+    rpc_calls = models.PositiveBigIntegerField(default=0)
+    storage_bytes = models.PositiveBigIntegerField(default=0)
+    compute_units = models.PositiveBigIntegerField(default=0)
+    rpc_cost_usd = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    storage_cost_usd = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    compute_cost_usd = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    actual_cost_usd = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    projected_monthly_cost_usd = models.DecimalField(
+        max_digits=14,
+        decimal_places=4,
+        default=0,
+    )
+    breakdown = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Cost breakdown by contract, event type, and storage consumption.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-month", "organization__name"]
+        unique_together = [("organization", "month")]
+        indexes = [
+            models.Index(fields=["organization", "month"]),
+        ]
+
+    def __str__(self):
+        return (
+            f"CostSnapshot({self.organization.name}, {self.month}, "
+            f"projected=${self.projected_monthly_cost_usd})"
+        )
+
+
 class Team(models.Model):
     """
     Multi-tenant organization: groups users and shared tracked contracts.
@@ -20,6 +173,13 @@ class Team(models.Model):
 
     name = models.CharField(max_length=128)
     slug = models.SlugField(max_length=160, unique=True, db_index=True)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="teams",
+        null=True,
+        blank=True,
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -51,6 +211,7 @@ class TeamMembership(models.Model):
     """Links a user to a team with a role."""
 
     class Role(models.TextChoices):
+        OWNER = "owner", "Owner"
         ADMIN = "admin", "Admin"
         MEMBER = "member", "Member"
 
@@ -89,6 +250,11 @@ class TrackedContract(models.Model):
         DEPRECATED = "deprecated", "Deprecated"
         SUSPENDED = "suspended", "Suspended"
 
+    class Network(models.TextChoices):
+        MAINNET = "mainnet", "Mainnet"
+        TESTNET = "testnet", "Testnet"
+        FUTURENET = "futurenet", "Futurenet"
+
     contract_id = models.CharField(
         max_length=56,
         unique=True,
@@ -108,6 +274,14 @@ class TrackedContract(models.Model):
         on_delete=models.CASCADE,
         related_name="tracked_contracts",
         help_text="User who registered this contract",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="tracked_contracts",
+        null=True,
+        blank=True,
+        help_text="Organization scope for tenant isolation",
     )
     team = models.ForeignKey(
         Team,
@@ -156,6 +330,13 @@ class TrackedContract(models.Model):
         blank=True,
         help_text="Max events per minute for ingest-time rate limiting (None = unlimited)",
     )
+    network = models.CharField(
+        max_length=16,
+        choices=Network.choices,
+        default=Network.MAINNET,
+        db_index=True,
+        help_text="Stellar network this contract is deployed on (mainnet, testnet, futurenet)",
+    )
 
     # ---------------------------------------------------------------------------
     # Event filtering (whitelist / blacklist)
@@ -184,6 +365,11 @@ class TrackedContract(models.Model):
         blank=True,
         help_text="List of event type names used by the whitelist/blacklist filter.",
     )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Custom attributes for storing contract metadata (team, owner, cost center, etc.)",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -193,6 +379,7 @@ class TrackedContract(models.Model):
         indexes = [
             models.Index(fields=["contract_id", "is_active"]),
             models.Index(fields=["alias"]),
+            models.Index(fields=["network", "is_active"]),
         ]
 
     def __str__(self):
@@ -559,15 +746,39 @@ class WebhookSubscription(models.Model):
         help_text="Strategy for calculating retry delays",
     )
     retry_backoff_seconds = models.PositiveIntegerField(
-        default=60,
+        default=2,
         validators=[MinValueValidator(1), MaxValueValidator(3600)],
-        help_text="Base seconds for backoff calculation (1-3600, default: 60)",
+        help_text="Base seconds for backoff calculation (e.g. 2s, 4s, 8s...) (1-3600, default: 2)",
     )
     signature_algorithm = models.CharField(
         max_length=16,
         choices=SIGNATURE_ALGORITHM_CHOICES,
         default=SIGNATURE_SHA256,
         help_text="HMAC algorithm used for X-SoroScan-Signature header.",
+    )
+    ack_header_name = models.CharField(
+        max_length=64,
+        default="X-SoroScan-Ack",
+        help_text="HTTP response header that must be present to acknowledge receipt.",
+    )
+    ack_header_value = models.CharField(
+        max_length=128,
+        default="ok",
+        help_text="Expected acknowledgement header value.",
+    )
+    delivery_sla_seconds = models.PositiveIntegerField(
+        default=30,
+        validators=[MinValueValidator(1), MaxValueValidator(3600)],
+        help_text="SLA target in seconds for successful delivery acknowledgements.",
+    )
+    escalation_policy = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Ordered escalation policy list, e.g. "
+            '[{"channel": "slack", "target": "...", "after_failures": 2}]. '
+            "Defaults to Slack -> SMS -> PagerDuty when empty."
+        ),
     )
     filter_condition = models.JSONField(
         blank=True,
@@ -580,6 +791,25 @@ class WebhookSubscription(models.Model):
 
     def __str__(self):
         return f"Webhook -> {self.target_url} ({self.contract.name})"
+
+    def get_known_event_types(self):
+        types = set()
+        if hasattr(self.contract, "event_schemas"):
+            types.update(self.contract.event_schemas.values_list("event_type", flat=True))
+        if hasattr(self.contract, "abi") and self.contract.abi.abi_json:
+            for ev in self.contract.abi.abi_json:
+                if isinstance(ev, dict) and ev.get("name"):
+                    types.add(ev["name"])
+        types.update(self.contract.events.values_list("event_type", flat=True).distinct())
+        return types
+
+    def clean(self):
+        super().clean()
+        if self.event_type and self.contract_id:
+            known = self.get_known_event_types()
+            if known and self.event_type not in known:
+                from django.core.exceptions import ValidationError
+                raise ValidationError({"event_type": f"Invalid event type. Available types: {', '.join(sorted(known))}"})
 
     def save(self, *args, **kwargs):
         # Auto-generate secret if not set
@@ -638,6 +868,21 @@ class WebhookDeliveryLog(models.Model):
         blank=True,
         help_text="Size of the webhook payload in bytes",
     )
+    acknowledged = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True when the subscriber returned the expected acknowledgement header.",
+    )
+    latency_ms = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Observed delivery latency in milliseconds.",
+    )
+    within_sla = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True when acknowledged delivery met the configured SLA target.",
+    )
 
     class Meta:
         ordering = ["-timestamp"]
@@ -648,6 +893,57 @@ class WebhookDeliveryLog(models.Model):
     def __str__(self):
         status_label = "OK" if self.success else f"FAIL({self.status_code})"
         return f"Delivery #{self.attempt_number} [{status_label}] sub={self.subscription_id}"
+
+
+class WebhookDeadLetter(models.Model):
+    """
+    Dead-letter queue entries for webhook deliveries that exhausted retries.
+
+    Operators can review and manually replay or resolve these records.
+    """
+
+    subscription = models.ForeignKey(
+        WebhookSubscription,
+        on_delete=models.CASCADE,
+        related_name="dead_letters",
+        help_text="Subscription whose delivery failed terminally",
+    )
+    event = models.ForeignKey(
+        "ContractEvent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="webhook_dead_letters",
+        help_text="Event payload associated with the failed delivery",
+    )
+    payload = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Serialized webhook payload for manual replay/review",
+    )
+    status_code = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Last observed subscriber HTTP status code",
+    )
+    error = models.TextField(blank=True)
+    retries_exhausted = models.PositiveIntegerField(
+        default=0,
+        help_text="How many attempts were exhausted before dead-lettering",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    resolved = models.BooleanField(default=False, db_index=True)
+    resolution_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["subscription", "created_at"]),
+            models.Index(fields=["resolved", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"WebhookDeadLetter(sub={self.subscription_id}, resolved={self.resolved})"
 
 
 class EventDeduplicationLog(models.Model):
@@ -746,6 +1042,13 @@ class APIKey(models.Model):
         on_delete=models.CASCADE,
         related_name="api_keys",
     )
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="api_keys",
+    )
     name = models.CharField(max_length=128)
     key = models.CharField(max_length=64, unique=True, db_index=True)
     tier = models.CharField(
@@ -770,6 +1073,8 @@ class APIKey(models.Model):
         if not self.quota_per_hour:
             quota = self.TIER_QUOTAS.get(self.tier, 50)
             self.quota_per_hour = quota if quota is not None else self.UNLIMITED_QUOTA
+        if self.team and not TeamMembership.objects.filter(team=self.team, user=self.user).exists():
+            raise ValidationError("API key user must be a member of the assigned team.")
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -1079,6 +1384,10 @@ class ContractDependency(models.Model):
         default=0,
         help_text="Total number of times this dependency has been observed",
     )
+    risk_score = models.FloatField(
+        default=0.0,
+        help_text="Edge-level risk score derived from call frequency and graph topology.",
+    )
     first_call = models.DateTimeField(
         auto_now_add=True,
         help_text="Timestamp of the first observed call",
@@ -1094,6 +1403,55 @@ class ContractDependency(models.Model):
 
     def __str__(self):
         return f"{self.caller.name} -> {self.callee.name} ({self.call_count})"
+
+
+class DependencyImpactAssessment(models.Model):
+    """
+    Latest vulnerability impact assessment for a root contract.
+
+    Stores blast radius, downstream contracts, and a quantified risk score.
+    """
+
+    IMPACT_LOW = "low"
+    IMPACT_MEDIUM = "medium"
+    IMPACT_HIGH = "high"
+    IMPACT_CRITICAL = "critical"
+    IMPACT_CHOICES = [
+        (IMPACT_LOW, "Low"),
+        (IMPACT_MEDIUM, "Medium"),
+        (IMPACT_HIGH, "High"),
+        (IMPACT_CRITICAL, "Critical"),
+    ]
+
+    root_contract = models.OneToOneField(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="dependency_impact",
+    )
+    affected_contracts = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ordered list of downstream impacted contract IDs.",
+    )
+    impacted_count = models.PositiveIntegerField(default=0)
+    has_cycles = models.BooleanField(default=False)
+    risk_score = models.FloatField(default=0.0)
+    impact_level = models.CharField(
+        max_length=16,
+        choices=IMPACT_CHOICES,
+        default=IMPACT_LOW,
+    )
+    assessment_details = models.JSONField(default=dict, blank=True)
+    computed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-computed_at"]
+
+    def __str__(self):
+        return (
+            f"DependencyImpact({self.root_contract.contract_id[:8]}..., "
+            f"score={self.risk_score:.1f})"
+        )
 
 
 class CallGraph(models.Model):
@@ -1403,3 +1761,347 @@ class ContractMetadata(models.Model):
 
     def __str__(self):
         return f"Metadata({self.contract.contract_id[:8]}...)"
+
+
+class ContractSource(models.Model):
+    """
+    Uploaded contract source code for verification.
+    """
+
+    contract = models.ForeignKey(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="sources",
+        help_text="Contract this source belongs to",
+    )
+    source_file = models.FileField(
+        upload_to="contract_sources/",
+        help_text="Uploaded source file (Rust code or tarball)",
+    )
+    abi_json = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="ABI JSON extracted from source or uploaded separately",
+    )
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="uploaded_sources",
+        help_text="User who uploaded this source",
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+        indexes = [
+            models.Index(fields=["contract", "uploaded_at"]),
+        ]
+
+    def __str__(self):
+        return f"Source for {self.contract.contract_id[:8]}... ({self.uploaded_at})"
+
+
+class ContractVerification(models.Model):
+    """
+    Verification result for contract source against deployed bytecode.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        VERIFIED = "verified", "Verified"
+        FAILED = "failed", "Failed"
+
+    contract = models.OneToOneField(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="verification",
+        help_text="Contract being verified",
+    )
+    source = models.ForeignKey(
+        ContractSource,
+        on_delete=models.CASCADE,
+        related_name="verifications",
+        help_text="Source used for verification",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        help_text="Verification status",
+    )
+    bytecode_hash = models.CharField(
+        max_length=64,
+        help_text="SHA256 hash of the deployed bytecode",
+    )
+    compiler_version = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Compiler version used to produce the bytecode",
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True, help_text="Error message if verification failed")
+
+    class Meta:
+        ordering = ["-verified_at"]
+
+    def __str__(self):
+        return f"Verification for {self.contract.contract_id[:8]}... ({self.status})"
+
+
+# ---------------------------------------------------------------------------
+# Issue #280: GDPR Data Governance Framework
+# ---------------------------------------------------------------------------
+
+class AuditLog(models.Model):
+    """
+    Immutable audit trail for every data mutation (create/update/delete).
+    Append-only: save() blocks updates, delete() is blocked entirely.
+    """
+
+    ACTION_CREATE = "create"
+    ACTION_UPDATE = "update"
+    ACTION_DELETE = "delete"
+    ACTION_CHOICES = [
+        (ACTION_CREATE, "Create"),
+        (ACTION_UPDATE, "Update"),
+        (ACTION_DELETE, "Delete"),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="User who performed the action (null for system actions)",
+    )
+    action = models.CharField(max_length=16, choices=ACTION_CHOICES, db_index=True)
+    model_name = models.CharField(max_length=64, db_index=True, help_text="Django model class name")
+    object_id = models.CharField(max_length=255, db_index=True)
+    changes = models.JSONField(default=dict, help_text="Before/after values for mutations")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-timestamp"]
+        indexes = [
+            models.Index(fields=["model_name", "object_id", "timestamp"]),
+            models.Index(fields=["user", "timestamp"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("AuditLog is immutable and cannot be updated.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("AuditLog is immutable and cannot be deleted.")
+
+    def __str__(self):
+        return f"[{self.action}] {self.model_name}:{self.object_id} by {self.user_id} @ {self.timestamp}"
+
+
+class PIIField(models.Model):
+    """
+    Registry of fields in event payloads that contain PII.
+    Used to identify data subject to GDPR deletion requests.
+    """
+
+    contract = models.ForeignKey(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="pii_fields",
+        help_text="Contract whose events contain this PII field",
+    )
+    event_type = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text="Event type containing this field (blank = all event types)",
+    )
+    field_path = models.CharField(
+        max_length=256,
+        help_text="Dot-notation path to the PII field in the payload (e.g. 'user.email')",
+    )
+    description = models.CharField(max_length=256, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("contract", "event_type", "field_path")]
+        ordering = ["contract", "field_path"]
+
+    def __str__(self):
+        return f"PII: {self.contract.contract_id[:8]}.../{self.event_type or '*'}/{self.field_path}"
+
+
+class DataDeletionRequest(models.Model):
+    """
+    GDPR 'right to be forgotten' request.
+    Tracks the lifecycle from submission through completion.
+    """
+
+    STATUS_PENDING = "pending"
+    STATUS_PROCESSING = "processing"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_PROCESSING, "Processing"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deletion_requests",
+        help_text="User who submitted the request",
+    )
+    subject_identifier = models.CharField(
+        max_length=256,
+        db_index=True,
+        help_text="Identifier of the data subject (e.g. wallet address, user ID)",
+    )
+    contracts = models.ManyToManyField(
+        TrackedContract,
+        blank=True,
+        related_name="deletion_requests",
+        help_text="Contracts whose events should be scrubbed (empty = all contracts)",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+    events_deleted = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of event records deleted or scrubbed",
+    )
+    error_message = models.TextField(blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-requested_at"]
+        indexes = [
+            models.Index(fields=["status", "requested_at"]),
+        ]
+
+    def __str__(self):
+        return f"DeletionRequest({self.subject_identifier}, {self.status})"
+
+
+# ---------------------------------------------------------------------------
+# Issue #284: Contract Deployment & Upgrade Tracking
+# ---------------------------------------------------------------------------
+
+class ContractDeployment(models.Model):
+    """
+    Records each deployment or upgrade of a contract on-chain.
+    A new row is created whenever a different bytecode_hash is observed
+    for the same contract_id.
+    """
+
+    contract = models.ForeignKey(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="deployments",
+        help_text="The tracked contract this deployment belongs to",
+    )
+    bytecode_hash = models.CharField(
+        max_length=64,
+        db_index=True,
+        help_text="SHA256 hash of the deployed WASM bytecode",
+    )
+    ledger_deployed = models.PositiveBigIntegerField(
+        db_index=True,
+        help_text="Ledger sequence at which this deployment was observed",
+    )
+    deployer_address = models.CharField(
+        max_length=56,
+        blank=True,
+        db_index=True,
+        help_text="Stellar account that deployed/upgraded the contract",
+    )
+    is_upgrade = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True when this deployment replaced a previous bytecode hash",
+    )
+    tx_hash = models.CharField(max_length=64, blank=True, help_text="Deployment transaction hash")
+    notes = models.TextField(blank=True)
+    detected_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-ledger_deployed"]
+        indexes = [
+            models.Index(fields=["contract", "ledger_deployed"]),
+            models.Index(fields=["bytecode_hash"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["contract", "bytecode_hash", "ledger_deployed"],
+                name="unique_contract_bytecode_ledger",
+            )
+        ]
+
+    def __str__(self):
+        kind = "upgrade" if self.is_upgrade else "deploy"
+        return f"{kind}@{self.ledger_deployed} ({self.contract.contract_id[:8]}...)"
+
+
+class ContractABIVersion(models.Model):
+    """
+    Versioned ABI snapshot tied to a specific deployment.
+    Stores the ledger range over which this ABI is valid so that
+    historical events can be decoded with the correct ABI.
+    """
+
+    contract = models.ForeignKey(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="abi_versions",
+        help_text="Contract this ABI version belongs to",
+    )
+    deployment = models.OneToOneField(
+        ContractDeployment,
+        on_delete=models.CASCADE,
+        related_name="abi_version",
+        null=True,
+        blank=True,
+        help_text="Deployment that introduced this ABI (null for manually uploaded ABIs)",
+    )
+    version_number = models.PositiveIntegerField(
+        help_text="Monotonically increasing version counter per contract",
+    )
+    abi_json = models.JSONField(help_text="ABI definition for this version")
+    valid_from_ledger = models.PositiveBigIntegerField(
+        db_index=True,
+        help_text="First ledger where this ABI applies",
+    )
+    valid_to_ledger = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Last ledger where this ABI applies (null = still current)",
+    )
+    has_breaking_changes = models.BooleanField(
+        default=False,
+        help_text="True if this ABI is incompatible with the previous version",
+    )
+    breaking_change_details = models.TextField(
+        blank=True,
+        help_text="Description of breaking changes detected",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-version_number"]
+        unique_together = [("contract", "version_number")]
+        indexes = [
+            models.Index(fields=["contract", "valid_from_ledger"]),
+        ]
+
+    def __str__(self):
+        return f"ABI v{self.version_number} for {self.contract.contract_id[:8]}... (ledger {self.valid_from_ledger}–{self.valid_to_ledger or '∞'})"

@@ -3,7 +3,7 @@ Django Admin configuration for SoroScan models.
 """
 from django import forms
 from django.contrib import admin, messages
-from django.contrib.admin.helpers import ActionForm
+from django.contrib.admin.helpers import ActionForm, ACTION_CHECKBOX_NAME
 from django.db.models import Count
 from django.http import HttpResponse
 from django.urls import path
@@ -17,24 +17,39 @@ from .models import (
     APIKey,
     ArchivalAuditLog,
     ArchivedEventBatch,
+    AuditLog,
     ContractABI,
+    ContractABIVersion,
+    ContractDependency,
+    ContractDeployment,
     ContractEvent,
+    DependencyImpactAssessment,
     ContractMetadata,
+    CallGraph,
     ContractSigningKey,
     ContractQuota,
+    ContractSource,
+    ContractVerification,
+    DataDeletionRequest,
     DataRetentionPolicy,
     EventSchema,
     IndexerState,
     IngestError,
+    Organization,
+    OrganizationBudget,
+    OrganizationCostSnapshot,
+    OrganizationMembership,
+    PIIField,
     RemediationIncident,
     RemediationRule,
     Team,
     TeamMembership,
     TrackedContract,
+    WebhookDeadLetter,
     WebhookDeliveryLog,
     WebhookSubscription,
 )
-from .tasks import backfill_contract_events
+from .tasks import backfill_contract_events, dispatch_webhook
 
 
 class BackfillActionForm(ActionForm):
@@ -98,7 +113,7 @@ class AdminAuditMixin:
 
 @admin.register(Team)
 class TeamAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "created_by", "created_at"]
+    list_display = ["name", "organization", "slug", "created_by", "created_at"]
     search_fields = ["name", "slug"]
     prepopulated_fields = {"slug": ("name",)}
 
@@ -110,6 +125,50 @@ class TeamMembershipAdmin(admin.ModelAdmin):
     search_fields = ["team__name", "user__username"]
 
 
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ["name", "slug", "owner", "quota", "created_at"]
+    search_fields = ["name", "slug", "owner__username"]
+    readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(OrganizationMembership)
+class OrganizationMembershipAdmin(admin.ModelAdmin):
+    list_display = ["organization", "user", "role", "invited_by", "joined_at"]
+    list_filter = ["role"]
+    search_fields = ["organization__name", "user__username"]
+
+
+@admin.register(OrganizationBudget)
+class OrganizationBudgetAdmin(admin.ModelAdmin):
+    list_display = [
+        "organization",
+        "monthly_budget_usd",
+        "warning_threshold_percent",
+        "critical_threshold_percent",
+        "is_active",
+        "updated_at",
+    ]
+    list_filter = ["is_active"]
+    search_fields = ["organization__name", "organization__slug"]
+
+
+@admin.register(OrganizationCostSnapshot)
+class OrganizationCostSnapshotAdmin(admin.ModelAdmin):
+    list_display = [
+        "organization",
+        "month",
+        "rpc_calls",
+        "storage_bytes",
+        "compute_units",
+        "actual_cost_usd",
+        "projected_monthly_cost_usd",
+    ]
+    list_filter = ["month"]
+    search_fields = ["organization__name", "organization__slug"]
+    readonly_fields = ["created_at", "updated_at"]
+
+
 
 @admin.register(TrackedContract)
 class TrackedContractAdmin(AdminAuditMixin, admin.ModelAdmin):
@@ -117,6 +176,7 @@ class TrackedContractAdmin(AdminAuditMixin, admin.ModelAdmin):
         "name",
         "alias",
         "contract_id_short",
+        "network",
         "owner",
         "team",
         "is_active",
@@ -127,17 +187,17 @@ class TrackedContractAdmin(AdminAuditMixin, admin.ModelAdmin):
         "event_count",
         "created_at",
     ]
-    list_filter = ["is_active", "deprecation_status", "event_filter_type", "created_at"]
+    list_filter = ["is_active", "network", "deprecation_status", "event_filter_type", "created_at"]
     search_fields = ["name", "alias", "contract_id"]
     readonly_fields = ["created_at", "updated_at"]
-    ordering = ["-created_at"]
+    ordering = ["-created_at", "name"]
     action_form = BackfillActionForm
     actions = ["backfill_events"]
     fieldsets = (
         (None, {
             "fields": (
                 "contract_id", "name", "alias", "description",
-                "owner", "team", "is_active",
+                "owner", "team", "network", "is_active",
             ),
         }),
         ("Event Filtering", {
@@ -151,7 +211,7 @@ class TrackedContractAdmin(AdminAuditMixin, admin.ModelAdmin):
         ("Advanced", {
             "fields": (
                 "deprecation_status", "deprecation_reason",
-                "max_events_per_minute", "abi_schema", "json_schema",
+                "max_events_per_minute", "abi_schema", "json_schema", "metadata",
                 "last_indexed_ledger",
             ),
             "classes": ("collapse",),
@@ -171,7 +231,7 @@ class TrackedContractAdmin(AdminAuditMixin, admin.ModelAdmin):
         queryset = super().get_queryset(request)
         return queryset.annotate(
             _event_count=Count("events", distinct=True)
-        ).select_related("owner")
+        ).select_related("owner", "team")
 
     @admin.display(description="Events")
     def event_count(self, obj):
@@ -456,7 +516,15 @@ class WebhookSubscriptionAdmin(AdminAuditMixin, admin.ModelAdmin):
             "fields": ("contract", "target_url", "event_type", "is_active"),
         }),
         ("Configuration", {
-            "fields": ("timeout_seconds", "signature_algorithm", "filter_condition"),
+            "fields": (
+                "timeout_seconds",
+                "signature_algorithm",
+                "ack_header_name",
+                "ack_header_value",
+                "delivery_sla_seconds",
+                "escalation_policy",
+                "filter_condition",
+            ),
         }),
         ("Retry Configuration", {
             "fields": ("retry_backoff_strategy", "retry_backoff_seconds"),
@@ -473,6 +541,44 @@ class WebhookSubscriptionAdmin(AdminAuditMixin, admin.ModelAdmin):
         }),
     )
     ordering = ["-created_at"]
+
+    class Media:
+        js = ("ingest/admin_event_type_autocomplete.js",)
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "event-types/",
+                self.admin_site.admin_view(self.event_types_api),
+                name="webhooksubscription_event_types",
+            ),
+        ]
+        return custom_urls + urls
+
+    def event_types_api(self, request):
+        from django.http import JsonResponse
+        from soroscan.ingest.models import TrackedContract
+        contract_id = request.GET.get("contract_id")
+        if not contract_id:
+            return JsonResponse({"results": []})
+        try:
+            contract = TrackedContract.objects.get(pk=contract_id)
+        except TrackedContract.DoesNotExist:
+            return JsonResponse({"results": []})
+        
+        types = set()
+        if hasattr(contract, "event_schemas"):
+            types.update(contract.event_schemas.values_list("event_type", flat=True))
+        if hasattr(contract, "abi") and contract.abi.abi_json:
+            for ev in contract.abi.abi_json:
+                if isinstance(ev, dict) and ev.get("name"):
+                    types.add(ev["name"])
+        types.update(contract.events.values_list("event_type", flat=True).distinct())
+        
+        results = [{"id": t, "text": t} for t in sorted(types)]
+        return JsonResponse({"results": results})
 
     def get_queryset(self, request):
         """Optimize queries with select_related to prevent N+1 issues."""
@@ -537,10 +643,13 @@ class WebhookDeliveryLogAdmin(AdminAuditMixin, admin.ModelAdmin):
         "subscription_url",
         "attempt_number",
         "status_code_display",
+        "acknowledged",
+        "within_sla",
+        "latency_ms",
         "success_display",
         "timestamp",
     ]
-    list_filter = ["success", "timestamp"]
+    list_filter = ["success", "acknowledged", "within_sla", "timestamp"]
     search_fields = ["subscription__target_url", "error"]
     readonly_fields = [
         "subscription",
@@ -548,6 +657,9 @@ class WebhookDeliveryLogAdmin(AdminAuditMixin, admin.ModelAdmin):
         "attempt_number",
         "status_code",
         "success",
+        "acknowledged",
+        "latency_ms",
+        "within_sla",
         "error",
         "timestamp",
     ]
@@ -585,6 +697,71 @@ class WebhookDeliveryLogAdmin(AdminAuditMixin, admin.ModelAdmin):
     @admin.display(description="Success", boolean=True)
     def success_display(self, obj):
         return obj.success
+
+    @admin.action(description="Retry selected webhook deliveries")
+    def retry_webhook_delivery(self, request, queryset):
+        """
+        Manually retry selected webhook deliveries by requeueing the Celery task.
+        Shows a confirmation page before proceeding.
+        """
+        from django.template.response import TemplateResponse
+
+        if request.POST.get("post"):
+            # Process the retry
+            count = 0
+            for obj in queryset:
+                dispatch_webhook.delay(obj.subscription_id, obj.event_id)
+                count += 1
+
+            self.message_user(
+                request,
+                f"Successfully requeued {count} webhook delivery/deliveries.",
+                messages.SUCCESS,
+            )
+            return None
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Are you sure?",
+            "queryset": queryset,
+            "opts": self.model._meta,
+            "action_checkbox_name": ACTION_CHECKBOX_NAME,
+            "media": self.media,
+        }
+
+        return TemplateResponse(
+            request,
+            "admin/ingest/webhookdeliverylog/webhook_retry_confirmation.html",
+            context,
+        )
+
+    actions = ["retry_webhook_delivery"]
+
+
+@admin.register(WebhookDeadLetter)
+class WebhookDeadLetterAdmin(AdminAuditMixin, admin.ModelAdmin):
+    """Manual review queue for webhook deliveries that exhausted retries."""
+
+    list_display = [
+        "id",
+        "subscription",
+        "status_code",
+        "retries_exhausted",
+        "resolved",
+        "created_at",
+    ]
+    list_filter = ["resolved", "created_at", "status_code"]
+    search_fields = ["subscription__target_url", "error"]
+    readonly_fields = [
+        "subscription",
+        "event",
+        "payload",
+        "status_code",
+        "error",
+        "retries_exhausted",
+        "created_at",
+    ]
+    ordering = ["-created_at"]
 
 
 # ---------------------------------------------------------------------------
@@ -632,6 +809,34 @@ class APIKeyAdmin(AdminAuditMixin, admin.ModelAdmin):
             quota = APIKey.TIER_QUOTAS.get(obj.tier, 50)
             obj.quota_per_hour = quota if quota is not None else APIKey.UNLIMITED_QUOTA
         super().save_model(request, obj, form, change)
+
+
+@admin.register(ContractDependency)
+class ContractDependencyAdmin(AdminAuditMixin, admin.ModelAdmin):
+    list_display = ["caller", "callee", "call_count", "risk_score", "last_call"]
+    list_filter = ["last_call"]
+    search_fields = ["caller__contract_id", "callee__contract_id"]
+
+
+@admin.register(CallGraph)
+class CallGraphAdmin(AdminAuditMixin, admin.ModelAdmin):
+    list_display = ["contract", "has_cycles", "computed_at"]
+    list_filter = ["has_cycles", "computed_at"]
+    readonly_fields = ["computed_at"]
+
+
+@admin.register(DependencyImpactAssessment)
+class DependencyImpactAssessmentAdmin(AdminAuditMixin, admin.ModelAdmin):
+    list_display = [
+        "root_contract",
+        "impacted_count",
+        "risk_score",
+        "impact_level",
+        "has_cycles",
+        "computed_at",
+    ]
+    list_filter = ["impact_level", "has_cycles", "computed_at"]
+    search_fields = ["root_contract__contract_id", "root_contract__name"]
 
 
 @admin.register(ContractQuota)
@@ -923,3 +1128,88 @@ class ContractMetadataAdmin(AdminAuditMixin, admin.ModelAdmin):
     search_fields = ["name", "description", "tags"]
     list_filter = [TagListFilter]
     readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(ContractSource)
+class ContractSourceAdmin(AdminAuditMixin, admin.ModelAdmin):
+    list_display = ["contract", "uploaded_by", "uploaded_at", "file_size"]
+    list_filter = ["uploaded_at"]
+    search_fields = ["contract__name", "contract__contract_id", "uploaded_by__username"]
+    readonly_fields = ["uploaded_at"]
+
+    def file_size(self, obj):
+        if obj.source_file:
+            return f"{obj.source_file.size} bytes"
+        return "—"
+    file_size.short_description = "File Size"
+
+
+@admin.register(ContractVerification)
+class ContractVerificationAdmin(AdminAuditMixin, admin.ModelAdmin):
+    list_display = ["contract", "status", "verified_at", "compiler_version"]
+    list_filter = ["status", "verified_at"]
+    search_fields = ["contract__name", "contract__contract_id"]
+    readonly_fields = ["verified_at"]
+
+
+# ---------------------------------------------------------------------------
+# Issue #280: GDPR Data Governance
+# ---------------------------------------------------------------------------
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ["timestamp", "action", "model_name", "object_id", "user", "ip_address"]
+    list_filter = ["action", "model_name", "timestamp"]
+    search_fields = ["object_id", "user__username", "model_name"]
+    readonly_fields = ["timestamp", "action", "model_name", "object_id", "user", "ip_address", "changes"]
+    ordering = ["-timestamp"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PIIField)
+class PIIFieldAdmin(admin.ModelAdmin):
+    list_display = ["contract", "event_type", "field_path", "description", "created_at"]
+    list_filter = ["created_at"]
+    search_fields = ["contract__contract_id", "contract__name", "field_path"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(DataDeletionRequest)
+class DataDeletionRequestAdmin(admin.ModelAdmin):
+    list_display = ["subject_identifier", "status", "requested_by", "events_deleted", "requested_at", "completed_at"]
+    list_filter = ["status", "requested_at"]
+    search_fields = ["subject_identifier", "requested_by__username"]
+    readonly_fields = ["requested_at", "completed_at", "events_deleted", "error_message"]
+    filter_horizontal = ["contracts"]
+
+
+# ---------------------------------------------------------------------------
+# Issue #284: Contract Deployment Tracking
+# ---------------------------------------------------------------------------
+
+@admin.register(ContractDeployment)
+class ContractDeploymentAdmin(admin.ModelAdmin):
+    list_display = ["contract", "bytecode_hash_short", "ledger_deployed", "deployer_address", "is_upgrade", "detected_at"]
+    list_filter = ["is_upgrade", "detected_at"]
+    search_fields = ["contract__contract_id", "contract__name", "bytecode_hash", "deployer_address"]
+    readonly_fields = ["detected_at"]
+
+    def bytecode_hash_short(self, obj):
+        return obj.bytecode_hash[:16] + "..."
+    bytecode_hash_short.short_description = "Bytecode Hash"
+
+
+@admin.register(ContractABIVersion)
+class ContractABIVersionAdmin(admin.ModelAdmin):
+    list_display = ["contract", "version_number", "valid_from_ledger", "valid_to_ledger", "has_breaking_changes", "created_at"]
+    list_filter = ["has_breaking_changes", "created_at"]
+    search_fields = ["contract__contract_id", "contract__name"]
+    readonly_fields = ["created_at"]

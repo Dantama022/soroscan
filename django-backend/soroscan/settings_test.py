@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-test-key-for-testing-only"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ["*"]
 FRONTEND_BASE_URL = "http://localhost:3000"
@@ -34,7 +34,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    "django_prometheus.middleware.PrometheusBeforeMiddleware",  # must be first
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
+    "soroscan.middleware.RequestBodySizeMiddleware", 
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -44,10 +45,11 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "django_prometheus.middleware.PrometheusAfterMiddleware",   # must be last
+    "soroscan.middleware.ApiDeprecationMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
-ROOT_URLCONF = "soroscan.urls"  # use main urls.py which has the /metrics route
+ROOT_URLCONF = "soroscan.urls_test"  # safe mirror — excludes strawberry/GDAL import
 
 TEMPLATES = [
     {
@@ -110,6 +112,7 @@ QUERY_CACHE_TTL_SECONDS = 60
 
 # REST Framework
 REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "soroscan.exceptions.custom_exception_handler",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
     "DEFAULT_FILTER_BACKENDS": [
@@ -130,6 +133,7 @@ REST_FRAMEWORK = {
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = []
 
 # Celery - Test settings (synchronous execution)
 CELERY_TASK_ALWAYS_EAGER = True
@@ -153,13 +157,20 @@ EVENT_STREAMING = {
     "backend": "kafka",
     "kafka": {
         "bootstrap_servers": ["localhost:9092"],
-        "topic_template": "soroscan-events-{contract_id}",
+        "topic": "soroscan.events",
+        "schema_registry_url": "",
     },
     "pubsub": {
         "project_id": "test-project",
-        "topic_template": "soroscan-events-{contract_id}",
+        "topic": "soroscan.events",
+    },
+    "sqs": {
+        "queue_url": "",
     },
 }
+
+# GraphQL Introspection — enabled in tests/dev
+GRAPHQL_INTROSPECTION_ENABLED = True
 
 # Logging
 LOGGING = {
@@ -175,3 +186,6 @@ LOGGING = {
         "level": "WARNING",
     },
 }
+
+MAX_REQUEST_BODY_SIZE = 10485760
+DEPRECATED_ENDPOINTS = {}
