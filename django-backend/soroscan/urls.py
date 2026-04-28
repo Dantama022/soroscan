@@ -3,7 +3,6 @@ URL configuration for SoroScan project.
 """
 from django.conf import settings
 from django.contrib import admin
-from django.http import JsonResponse
 from django.urls import include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -24,8 +23,8 @@ from soroscan.ingest.schema import schema
 
 from .error_handlers import custom_404 as handler404_view, custom_500 as handler500_view
 
-handler404 = 'soroscan.error_handlers.custom_404'
-handler500 = 'soroscan.error_handlers.custom_500'
+handler404 = handler404_view
+handler500 = handler500_view
 
 urlpatterns = [
     # Prometheus metrics — must be unauthenticated; placed before any auth middleware
