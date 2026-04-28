@@ -1,6 +1,7 @@
 """
 API Views for SoroScan event ingestion.
 """
+
 import hashlib
 import hmac
 import json
@@ -16,7 +17,12 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers, status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
+from rest_framework.decorators import (
+    action,
+    api_view,
+    permission_classes,
+    throttle_classes,
+)
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -26,7 +32,14 @@ import requests as http_requests
 
 from soroscan.throttles import IngestRateThrottle
 
-from .cache_utils import cache_result, get_or_set_json, query_cache_ttl, stable_cache_key
+from .decorators import webhook_hmac_required
+
+from .cache_utils import (
+    cache_result,
+    get_or_set_json,
+    query_cache_ttl,
+    stable_cache_key,
+)
 from .models import (
     APIKey,
     AdminAction,
@@ -127,7 +140,9 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if self.request.method in ["GET", "HEAD", "OPTIONS"]:
             if user.is_authenticated:
-                return qs.filter(Q(owner=user) | Q(team__memberships__user=user)).distinct()
+                return qs.filter(
+                    Q(owner=user) | Q(team__memberships__user=user)
+                ).distinct()
             return qs
         return qs.filter(owner=self.request.user)
 
@@ -215,7 +230,17 @@ class ContractEventViewSet(viewsets.ReadOnlyModelViewSet):
                     "payload_contains": serializers.CharField(required=False),
                     "payload_field": serializers.CharField(required=False),
                     "payload_op": serializers.ChoiceField(
-                        choices=["eq", "neq", "gte", "lte", "gt", "lt", "contains", "startswith", "in"],
+                        choices=[
+                            "eq",
+                            "neq",
+                            "gte",
+                            "lte",
+                            "gt",
+                            "lt",
+                            "contains",
+                            "startswith",
+                            "in",
+                        ],
                         required=False,
                     ),
                     "payload_value": serializers.CharField(required=False),
@@ -259,6 +284,7 @@ class ContractEventViewSet(viewsets.ReadOnlyModelViewSet):
             # The GIN index speeds up JSON containment (@>) queries; for plain text
             # search we rely on PostgreSQL's icontains on the cast.
             from django.db.models import TextField
+
             qs = qs.annotate(
                 _payload_text=Cast("payload", output_field=TextField())
             ).filter(_payload_text__icontains=q)
@@ -268,6 +294,7 @@ class ContractEventViewSet(viewsets.ReadOnlyModelViewSet):
         if payload_contains:
             # Simple text containment inside the JSON; works with GIN index
             from django.db.models import TextField
+
             if not q:  # avoid double annotation
                 qs = qs.annotate(
                     _payload_text=Cast("payload", output_field=TextField())
@@ -363,7 +390,9 @@ class ContractInvocationViewSet(viewsets.ReadOnlyModelViewSet):
     def get_serializer_context(self):
         """Add include_events flag from query params."""
         context = super().get_serializer_context()
-        context["include_events"] = self.request.query_params.get("include_events") == "true"
+        context["include_events"] = (
+            self.request.query_params.get("include_events") == "true"
+        )
         return context
 
     def list(self, request, *args, **kwargs):
@@ -396,7 +425,6 @@ class ContractInvocationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(serializer.data)
 
 
-
 class WebhookSubscriptionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing webhook subscriptions.
@@ -415,7 +443,7 @@ class WebhookSubscriptionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Public read access, but filter by owner for write operations
-        if self.request.method in ['GET', 'HEAD', 'OPTIONS']:
+        if self.request.method in ["GET", "HEAD", "OPTIONS"]:
             return WebhookSubscription.objects.all()
         return WebhookSubscription.objects.filter(contract__owner=self.request.user)
 
@@ -446,7 +474,9 @@ class WebhookSubscriptionViewSet(viewsets.ModelViewSet):
             "timestamp": timezone.now().isoformat(),
         }
         payload_bytes = json.dumps(test_payload, sort_keys=True).encode("utf-8")
-        algorithm = (webhook.signature_algorithm or WebhookSubscription.SIGNATURE_SHA256).lower()
+        algorithm = (
+            webhook.signature_algorithm or WebhookSubscription.SIGNATURE_SHA256
+        ).lower()
         if algorithm == WebhookSubscription.SIGNATURE_SHA1:
             digestmod = hashlib.sha1
             prefix = "sha1"
@@ -565,7 +595,9 @@ class TeamViewSet(viewsets.ModelViewSet):
         try:
             new_user = User.objects.get(pk=ser.validated_data["user_id"])
         except User.DoesNotExist:
-            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND
+            )
         _, created = TeamMembership.objects.get_or_create(
             team=team,
             user=new_user,
@@ -789,9 +821,9 @@ def contract_event_explorer_view(request, contract_id: str):
 def contract_event_types_view(request, contract_id: str):
     """Get event types and their counts for a specific contract."""
     contract = get_object_or_404(TrackedContract, contract_id=contract_id)
-    
+
     cache_key = stable_cache_key("contract_event_types", {"contract_id": contract_id})
-    
+
     def _build():
         return list(
             ContractEvent.objects.filter(contract=contract)
@@ -799,11 +831,11 @@ def contract_event_types_view(request, contract_id: str):
             .annotate(
                 count=Count("id"),
                 first_seen=Min("timestamp"),
-                last_seen=Max("timestamp")
+                last_seen=Max("timestamp"),
             )
             .order_by("-count")
         )
-    
+
     result = get_or_set_json(cache_key, 60, _build)
     return Response(result)
 
@@ -846,7 +878,9 @@ def restore_archived_events(request):
     """
     batch_id = request.query_params.get("batch_id") or request.data.get("batch_id")
     if not batch_id:
-        return Response({"detail": "batch_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"detail": "batch_id is required."}, status=status.HTTP_400_BAD_REQUEST
+        )
 
     batch = get_object_or_404(ArchivedEventBatch, id=batch_id)
 
@@ -883,7 +917,9 @@ def restore_archived_events(request):
     restored_count = 0
     for row in rows:
         try:
-            contract = TrackedContract.objects.get(contract_id=row["contract__contract_id"])
+            contract = TrackedContract.objects.get(
+                contract_id=row["contract__contract_id"]
+            )
             ContractEvent.objects.get_or_create(
                 contract=contract,
                 ledger=row["ledger"],
@@ -898,12 +934,15 @@ def restore_archived_events(request):
             )
             restored_count += 1
         except Exception:
-            logger.warning("Skipped row during restore: %s", row.get("id"), exc_info=True)
+            logger.warning(
+                "Skipped row during restore: %s", row.get("id"), exc_info=True
+            )
 
     batch.status = ArchivedEventBatch.STATUS_RESTORED
     batch.save(update_fields=["status"])
 
     from .models import ArchivalAuditLog  # noqa: PLC0415
+
     ArchivalAuditLog.objects.create(
         action=ArchivalAuditLog.ACTION_RESTORE,
         batch=batch,
@@ -976,11 +1015,13 @@ def audit_trail_view(request):
 def admin_ingest_errors_view(request):
     """Get recent ingest errors (admin only)."""
     if not request.user.is_staff:
-        return Response({"error": "Admin access required"}, status=status.HTTP_403_FORBIDDEN)
-    
+        return Response(
+            {"error": "Admin access required"}, status=status.HTTP_403_FORBIDDEN
+        )
+
     # Last 24 hours
     since = timezone.now() - timezone.timedelta(hours=24)
-    
+
     # Group by error_type + contract_id and aggregate
     errors = (
         IngestError.objects.filter(created_at__gte=since)
@@ -988,11 +1029,11 @@ def admin_ingest_errors_view(request):
         .annotate(
             count=Count("id"),
             last_occurrence=Max("created_at"),
-            sample_error=Max("sample_error")  # Get one sample error message
+            sample_error=Max("sample_error"),  # Get one sample error message
         )
         .order_by("-count")
     )
-    
+
     return Response(list(errors))
 
 
@@ -1058,3 +1099,38 @@ def rate_limit_analytics_view(request):
             "api_keys": results,
         }
     )
+
+
+@extend_schema(
+    request=inline_serializer(
+        name="WebhookReceiverRequest",
+        fields={
+            "contract_id": serializers.CharField(),
+            "event_type": serializers.CharField(),
+            "payload": serializers.JSONField(),
+        },
+    ),
+    responses={
+        200: inline_serializer(
+            name="WebhookReceiverResponse", fields={"status": serializers.CharField()}
+        )
+    },
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])  # Secured by HMAC decorator
+@webhook_hmac_required()
+def webhook_receiver_example(request):
+    """
+    Example webhook receiver that uses the HMAC validation decorator.
+
+    This endpoint is public (AllowAny) but requires a valid X-SoroScan-Signature
+    header to proceed. The decorator verifies the signature using the secret
+    associated with the 'contract_id' in the payload.
+    """
+    data = request.data
+    logger.info(
+        "Received verified webhook for contract %s, event %s",
+        data.get("contract_id"),
+        data.get("event_type"),
+    )
+    return Response({"status": "verified"})
