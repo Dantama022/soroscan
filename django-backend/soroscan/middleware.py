@@ -171,10 +171,10 @@ class ApiDeprecationMiddleware:
     def __call__(self, request):
         response = self.get_response(request)
         deprecated_endpoints = getattr(settings, "DEPRECATED_ENDPOINTS", {})
-        
+
         # Normalize request path: remove leading/trailing slashes
         norm_request_path = request.path.strip("/")
-        
+
         for path, config in deprecated_endpoints.items():
             # Normalize config path
             if path.strip("/") == norm_request_path:
@@ -183,3 +183,39 @@ class ApiDeprecationMiddleware:
                 response["Link"] = f'<{config.get("replacement", "")}>; rel="replacement"'
                 break
         return response
+
+
+_STATIC_PATH_PREFIXES = ("/static/", "/media/", "/favicon.ico")
+
+ip_logger = logging.getLogger("soroscan.ip_access")
+
+
+class ClientIPLoggingMiddleware:
+    """
+    Log the client IP address, HTTP method, and request path for every
+    incoming API request.
+
+    The client IP is read from REMOTE_ADDR, which is expected to already
+    be set correctly by ReverseProxyFixedIPMiddleware when running behind
+    a proxy. Static-asset paths are excluded to avoid log noise.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        path = request.path
+        if not path.startswith(_STATIC_PATH_PREFIXES):
+            client_ip = request.META.get("REMOTE_ADDR", "unknown")
+            ip_logger.info(
+                "%s %s from %s",
+                request.method,
+                path,
+                client_ip,
+                extra={
+                    "client_ip": client_ip,
+                    "method": request.method,
+                    "path": path,
+                },
+            )
+        return self.get_response(request)

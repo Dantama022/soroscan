@@ -109,6 +109,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "soroscan.middleware.ReverseProxyFixedIPMiddleware",
+    "soroscan.middleware.ClientIPLoggingMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "soroscan.middleware.RequestIdMiddleware",
     "soroscan.middleware.PlatformVersionMiddleware",
@@ -494,6 +495,15 @@ LOGGING["handlers"]["security_audit"] = {
 }
 LOGGING["loggers"]["soroscan.security_audit"] = {
     "handlers": ["security_audit", "console"],
+    "level": "INFO",
+    "propagate": False,
+}
+
+# ---------------------------------------------------------------------------
+# IP access logger — client IP, method, and path for every API request
+# ---------------------------------------------------------------------------
+LOGGING["loggers"]["soroscan.ip_access"] = {
+    "handlers": ["console"],
     "level": "INFO",
     "propagate": False,
 }

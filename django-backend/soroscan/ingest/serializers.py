@@ -1,6 +1,8 @@
 """
 DRF Serializers for SoroScan API.
 """
+import re
+
 from rest_framework import serializers
 
 from django.utils.text import slugify
@@ -21,6 +23,9 @@ from .models import (
     TrackedContract,
     WebhookSubscription,
 )
+
+_CONTRACT_ID_RE = re.compile(r"^C[A-Z2-7]{55}$")
+_VALID_NETWORKS = {choice[0] for choice in TrackedContract.Network.choices}
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -127,6 +132,11 @@ class TrackedContractSerializer(serializers.ModelSerializer):
     Used for creating, updating, and returning tracked Soroban smart contracts.
     """
 
+    # Declare these as plain CharField to bypass model-level RegexValidator/UniqueValidator
+    # and choices validation so our validate_* methods control error messages entirely.
+    contract_id = serializers.CharField(validators=[])
+    network = serializers.CharField(required=False, default=TrackedContract.Network.MAINNET)
+
     event_count = serializers.SerializerMethodField()
     warnings = serializers.SerializerMethodField()
     team = serializers.PrimaryKeyRelatedField(
@@ -143,6 +153,7 @@ class TrackedContractSerializer(serializers.ModelSerializer):
             "name",
             "alias",
             "description",
+            "network",
             "abi_schema",
             "json_schema",
             "is_active",
@@ -168,6 +179,34 @@ class TrackedContractSerializer(serializers.ModelSerializer):
     def get_warnings(self, obj) -> list[dict[str, str]]:
         warning = obj.deprecation_warning()
         return [warning] if warning else []
+
+    def validate_contract_id(self, value: str) -> str:
+        value = value.strip()
+
+        if not _CONTRACT_ID_RE.match(value):
+            raise serializers.ValidationError(
+                "Invalid contract address. A Soroban contract address must start "
+                "with 'C', be exactly 56 characters long, and use only uppercase "
+                "Base32 characters (A-Z and 2-7)."
+            )
+
+        # On create, reject duplicates with a clear message.
+        if self.instance is None:
+            if TrackedContract.objects.filter(contract_id=value).exists():
+                raise serializers.ValidationError(
+                    f"Contract '{value}' is already registered. "
+                    "Each contract address can only be tracked once."
+                )
+
+        return value
+
+    def validate_network(self, value: str) -> str:
+        if value not in _VALID_NETWORKS:
+            valid = ", ".join(sorted(_VALID_NETWORKS))
+            raise serializers.ValidationError(
+                f"'{value}' is not a valid network. Choose one of: {valid}."
+            )
+        return value
 
     def validate_team(self, value):
         request = self.context.get("request")

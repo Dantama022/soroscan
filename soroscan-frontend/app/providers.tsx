@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { ToastProvider } from "@/context/ToastContext";
+import { OnboardingProvider } from "@/context/OnboardingContext";
+import { OnboardingTour } from "@/components/OnboardingTour";
 import { ApolloProvider } from "@/providers/ApolloProvider";
 import { KeyboardShortcutsOverlay } from "@/components/terminal/KeyboardShortcutsOverlay";
 
@@ -16,6 +18,12 @@ export function Providers({ children }: ProvidersProps) {
         <KeyboardShortcutsOverlay />
         {children}
       </ToastProvider>
+      <OnboardingProvider>
+        <ToastProvider>
+          {children}
+          <OnboardingTour />
+        </ToastProvider>
+      </OnboardingProvider>
     </ApolloProvider>
   );
 }

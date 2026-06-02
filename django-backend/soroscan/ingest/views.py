@@ -1091,6 +1091,79 @@ def contract_event_types_view(request, contract_id: str):
 @extend_schema(
     parameters=[
         inline_serializer(
+            name="EventTypeStatisticsParams",
+            fields={
+                "contract_id": serializers.CharField(required=False),
+            },
+        )
+    ],
+    responses=inline_serializer(
+        name="EventTypeStatisticsResponse",
+        fields={
+            "contract_id": serializers.CharField(allow_null=True),
+            "total_events": serializers.IntegerField(),
+            "event_types": serializers.JSONField(),
+        },
+    ),
+)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def event_type_statistics_view(request):
+    """Return event type distribution globally or for a specific contract."""
+    contract_id = request.query_params.get("contract_id")
+
+    contract = None
+    if contract_id:
+        contract = get_cached_contract(contract_id)
+        if not contract:
+            from django.http import Http404
+            raise Http404
+
+    cache_key = stable_cache_key(
+        "event_type_statistics",
+        {"contract_id": contract_id or "all"},
+    )
+
+    def _build():
+        events = ContractEvent.objects.select_related("contract").all()
+
+        if contract:
+            events = events.filter(contract=contract)
+
+        total_events = events.count()
+
+        event_types = list(
+            events.values("contract__contract_id", "event_type")
+            .annotate(
+                count=Count("id"),
+                first_seen=Min("timestamp"),
+                last_seen=Max("timestamp"),
+            )
+            .order_by("contract__contract_id", "-count", "event_type")
+        )
+
+        return {
+            "contract_id": contract_id if contract_id else None,
+            "total_events": total_events,
+            "event_types": [
+                {
+                    "contract_id": item["contract__contract_id"],
+                    "event_type": item["event_type"],
+                    "count": item["count"],
+                    "first_seen": item["first_seen"],
+                    "last_seen": item["last_seen"],
+                }
+                for item in event_types
+            ],
+        }
+
+    payload = get_or_set_json(cache_key, query_cache_ttl(), _build)
+    return Response(payload)
+
+
+@extend_schema(
+    parameters=[
+        inline_serializer(
             name="RestoreArchiveParams",
             fields={"batch_id": serializers.IntegerField()},
         )
