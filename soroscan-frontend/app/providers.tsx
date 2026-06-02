@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { ToastProvider } from "@/context/ToastContext";
 import { ApolloProvider } from "@/providers/ApolloProvider";
+import { KeyboardShortcutsOverlay } from "@/components/terminal/KeyboardShortcutsOverlay";
 
 interface ProvidersProps {
   children: ReactNode;
@@ -11,7 +12,10 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <ApolloProvider>
-      <ToastProvider>{children}</ToastProvider>
+      <ToastProvider>
+        <KeyboardShortcutsOverlay />
+        {children}
+      </ToastProvider>
     </ApolloProvider>
   );
 }
