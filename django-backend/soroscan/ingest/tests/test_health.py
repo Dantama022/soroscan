@@ -62,3 +62,42 @@ class TestReadinessView:
         assert response.data["status"] == "not_ready"
         assert any("redis" in e for e in response.data["errors"])
         assert response["X-SoroScan-Version"] == settings.SOFTWARE_VERSION
+
+
+@pytest.mark.django_db
+class TestWorkerHealthView:
+    def test_worker_health_returns_200_when_worker_responds(self, api_client, monkeypatch):
+        class DummyInspect:
+            def ping(self):
+                return {"worker1@hostname": {"ok": "pong"}}
+
+        monkeypatch.setattr(
+            "soroscan.health.app.control.inspect",
+            lambda timeout=None: DummyInspect(),
+        )
+
+        url = reverse("worker-health")
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "healthy"
+        assert response.data["workers"] == {"worker1@hostname": {"ok": "pong"}}
+        assert response["X-SoroScan-Version"] == settings.SOFTWARE_VERSION
+
+    def test_worker_health_returns_503_when_workers_unresponsive(self, api_client, monkeypatch):
+        class DummyInspect:
+            def ping(self):
+                return {}
+
+        monkeypatch.setattr(
+            "soroscan.health.app.control.inspect",
+            lambda timeout=None: DummyInspect(),
+        )
+
+        url = reverse("worker-health")
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert response.data["status"] == "unhealthy"
+        assert "no worker responded" in response.data["error"]
+        assert response["X-SoroScan-Version"] == settings.SOFTWARE_VERSION
