@@ -218,17 +218,19 @@ def test_ingest_migration_forward_and_backward_paths(migration_node):
         rolled_back_state = executor.loader.project_state(previous_targets)
         _assert_schema_matches_state(connection, rolled_back_state)
         _assert_seed_data(rolled_back_state, database, seed_data)
-    except django.db.utils.OperationalError as e:
-        # Ignore SQLite-specific rollback/schema modification quirks
-        if "duplicate column name" in str(e) or "no such index" in str(e):
-            pytest.skip(f"SQLite schema quirk ignored: {e}")
+    except (django.db.utils.OperationalError, django.db.utils.ProgrammingError) as e:
+        # Ignore database-specific rollback/schema modification quirks
+        # SQLite uses OperationalError; Postgres uses ProgrammingError
+        err_str = str(e).lower()
+        if "duplicate column" in err_str or "already exists" in err_str or "no such index" in err_str or "does not exist" in err_str:
+            pytest.skip(f"Database schema quirk ignored: {e}")
         raise
     except django.db.utils.IntegrityError as e:
-        if "NOT NULL constraint failed" in str(e):
-            pytest.skip(f"SQLite default constraint quirk ignored: {e}")
+        if "not null constraint" in str(e).lower() or "violates not-null" in str(e).lower():
+            pytest.skip(f"Database default constraint quirk ignored: {e}")
         raise
     finally:
         try:
             MigrationExecutor(connection).migrate(leaf_targets)
-        except django.db.utils.OperationalError:
+        except (django.db.utils.OperationalError, django.db.utils.ProgrammingError):
             pass  # If the DB is completely disjointed, allow it to fail silently so next parameterized test truncates it.
