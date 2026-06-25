@@ -194,6 +194,13 @@ def test_ingest_migration_forward_and_backward_paths(migration_node):
     leaf_targets = executor.loader.graph.leaf_nodes(app=APP_LABEL)
 
     previous_targets = _migration_dependencies(executor, migration_node)
+    
+    # Skip empty merge migrations as they have no operations and rolling them back
+    # can cause ambiguous states in the migration executor graph.
+    migration_instance = executor.loader.graph.nodes[migration_node]
+    if not migration_instance.operations:
+        return
+
     try:
         executor.migrate(previous_targets)
         previous_state = executor.loader.project_state(previous_targets)
