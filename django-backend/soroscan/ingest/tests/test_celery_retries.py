@@ -1,7 +1,4 @@
-import logging
 from unittest.mock import patch, MagicMock
-
-import pytest
 
 from soroscan.celery import record_celery_task_retry
 
