@@ -42,7 +42,7 @@ export function ContractTable({ contracts, onDelete, onRegister, showFavoritesOn
   return (
     <>
       {/* ── Mobile card view (< 640px) ── */}
-      <div className="flex flex-col gap-3 sm:hidden">
+      <div className="flex flex-col gap-3 sm:hidden" data-testid="contract-mobile-list">
         {filteredContracts.map((contract) => (
           <div
             key={contract.id}
@@ -62,7 +62,8 @@ export function ContractTable({ contracts, onDelete, onRegister, showFavoritesOn
                     e.stopPropagation();
                     toggleFavorite(contract.id);
                   }}
-                  className="focus:outline-none"
+                  className="focus:outline-none min-w-[44px] min-h-[44px] flex items-center justify-center"
+                  aria-label={isFavorite(contract.id) ? "Remove from favorites" : "Add to favorites"}
                 >
                   <Star
                     size={20}
@@ -105,6 +106,7 @@ export function ContractTable({ contracts, onDelete, onRegister, showFavoritesOn
               <Button
                 variant="danger"
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete(contract.id);
@@ -136,7 +138,7 @@ export function ContractTable({ contracts, onDelete, onRegister, showFavoritesOn
       </div>
 
       {/* ── Desktop table view (≥ 640px) ── */}
-      <div className="hidden sm:block">
+      <div className="hidden sm:block" data-testid="contract-desktop-table">
         <Table>
           <TableHeader>
             <TableRow>

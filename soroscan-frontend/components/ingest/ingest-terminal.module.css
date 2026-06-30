@@ -592,6 +592,12 @@
     text-align: center;
   }
 
+  .fieldInput,
+  .fieldRow select {
+    min-height: 44px;
+    padding: 0.65rem 0.75rem;
+  }
+
   /* Pagination stacks */
   .paginationRow {
     flex-wrap: wrap;

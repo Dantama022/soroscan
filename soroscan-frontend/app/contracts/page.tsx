@@ -69,25 +69,30 @@ export default function ContractsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-terminal-black p-8">
+    <div className="min-h-screen bg-terminal-black p-4 sm:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-terminal-mono text-terminal-green mb-2">
+            <h1 className="text-2xl sm:text-3xl font-terminal-mono text-terminal-green mb-2">
               [CONTRACT_REGISTRY]
             </h1>
             <p className="text-terminal-gray font-terminal-mono text-sm">
               Manage tracked contracts and event monitoring
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button
               variant={showFavoritesOnly ? "primary" : "secondary"}
               onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+              className="w-full sm:w-auto"
             >
               {showFavoritesOnly ? "Show All" : "Show Favorites"}
             </Button>
-            <Button variant="primary" onClick={() => setIsRegisterModalOpen(true)}>
+            <Button
+              variant="primary"
+              onClick={() => setIsRegisterModalOpen(true)}
+              className="w-full sm:w-auto"
+            >
               Register Contract
             </Button>
           </div>

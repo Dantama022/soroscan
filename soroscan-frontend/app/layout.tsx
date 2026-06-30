@@ -16,6 +16,11 @@ const jetbrainsMono = JetBrains_Mono({
 
 const BASE_URL = "https://soroscan.io"
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {

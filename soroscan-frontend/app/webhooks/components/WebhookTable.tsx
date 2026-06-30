@@ -221,8 +221,8 @@ export function WebhookTable({ webhooks, onDelete, onTest, testingId, testResult
 
   return (
     <>
-      {/* Mobile: stacked cards (hidden on md+) */}
-      <div className="md:hidden space-y-2" data-testid="webhook-mobile-list">
+      {/* Mobile: stacked cards (hidden on sm+) */}
+      <div className="sm:hidden space-y-2" data-testid="webhook-mobile-list">
         {sorted.map((wh) => (
           <WebhookCard
             key={wh.id}
@@ -235,8 +235,8 @@ export function WebhookTable({ webhooks, onDelete, onTest, testingId, testResult
         ))}
       </div>
 
-      {/* Desktop: table (hidden below md) */}
-      <div className="hidden md:block overflow-x-auto" data-testid="webhook-desktop-table">
+      {/* Desktop: table (hidden below sm) */}
+      <div className="hidden sm:block overflow-x-auto" data-testid="webhook-desktop-table">
         <Table>
           <TableHeader>
             <TableRow>

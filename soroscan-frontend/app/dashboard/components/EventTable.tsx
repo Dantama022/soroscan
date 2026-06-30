@@ -393,7 +393,7 @@ export function EventTable({
             text-align: right;
           }
 
-          @media (max-width: 768px) {
+          @media (max-width: 639px) {
             .soroscan-events-table {
               display: none;
             }
@@ -402,6 +402,28 @@ export function EventTable({
               display: grid;
               grid-template-columns: 1fr;
               gap: 0.9rem;
+            }
+          }
+
+          @media (min-width: 640px) and (max-width: 1023px) {
+            .soroscan-events-table {
+              display: none;
+            }
+
+            .soroscan-events-card-grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 0.9rem;
+            }
+          }
+
+          @media (min-width: 1024px) {
+            .soroscan-events-table {
+              display: table;
+            }
+
+            .soroscan-events-card-grid {
+              display: none;
             }
           }
         `}

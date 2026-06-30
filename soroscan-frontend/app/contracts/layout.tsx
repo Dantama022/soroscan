@@ -1,7 +1,7 @@
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppShell } from "@/components/layout/AppShell";
 
-export default function DashboardLayout({
+export default function ContractsLayout({
   children,
 }: {
   children: React.ReactNode;
