@@ -1,6 +1,6 @@
 import React from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { Alert } from './Alert'
+import { Alert } from './alert'
 
 describe('Alert Component', () => {
   it('renders all variants correctly', () => {
