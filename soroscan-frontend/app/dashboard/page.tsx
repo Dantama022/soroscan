@@ -56,12 +56,6 @@ export default function DashboardPage() {
           <p className="text-sm text-terminal-gray">
             Snapshot viewer for key operational metrics. Use the controls to inspect recent intervals.
           </p>
-          <a
-            href="/dashboard/rate-limits"
-            className="inline-block rounded border border-terminal-cyan/40 px-3 py-2 text-xs uppercase text-terminal-cyan hover:bg-terminal-cyan/10"
-          >
-            View Rate Limit Analytics
-          </a>
         </header>
 
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">

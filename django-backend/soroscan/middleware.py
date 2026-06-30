@@ -134,7 +134,7 @@ class RequestBodySizeMiddleware:
 
     def __call__(self, request):
         # We check this at the very beginning of the __call__
-        if request.method in ("POST", "PUT", "PATCH"):
+        if request.method == "POST":
             max_size = getattr(settings, "MAX_REQUEST_BODY_SIZE", 10485760)
             try:
                 content_length = int(request.META.get('CONTENT_LENGTH', 0))
