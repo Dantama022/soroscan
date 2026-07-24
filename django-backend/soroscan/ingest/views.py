@@ -14,6 +14,7 @@ from django.db.models import Count, Max, Min, Q, Avg
 from django.db.models.functions import Cast
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers, status, viewsets
@@ -204,6 +205,41 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
         events = contract.events.select_related("contract").all()[:100]
         serializer = ContractEventSerializer(events, many=True)
         return Response(serializer.data)
+
+    @extend_schema(
+        request=inline_serializer(
+            name="ContractPauseRequest",
+            fields={
+                "reason": serializers.CharField(required=False, allow_blank=True),
+                "resume_at": serializers.DateTimeField(required=False, allow_null=True),
+            },
+        ),
+        responses=TrackedContractSerializer,
+    )
+    @action(detail=True, methods=["post"])
+    def pause(self, request, pk=None):
+        """Suspend indexing for this contract; historical data stays queryable."""
+        contract = self.get_object()
+        reason = request.data.get("reason", "")
+        resume_at_raw = request.data.get("resume_at")
+        resume_at = parse_datetime(resume_at_raw) if resume_at_raw else None
+        if resume_at_raw and resume_at is None:
+            return Response(
+                {"detail": "resume_at must be a valid ISO 8601 datetime."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        contract.pause(reason=reason, resume_at=resume_at)
+        contract.refresh_from_db()
+        return Response(TrackedContractSerializer(contract).data)
+
+    @extend_schema(responses=TrackedContractSerializer)
+    @action(detail=True, methods=["post"])
+    def resume(self, request, pk=None):
+        """Resume indexing for a previously paused contract."""
+        contract = self.get_object()
+        contract.resume()
+        contract.refresh_from_db()
+        return Response(TrackedContractSerializer(contract).data)
 
     @extend_schema(
         responses=inline_serializer(

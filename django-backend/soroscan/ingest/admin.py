@@ -7,6 +7,7 @@ from django.contrib.admin.helpers import ActionForm, ACTION_CHECKBOX_NAME
 from django.db.models import Count
 from django.http import HttpResponse, StreamingHttpResponse
 from django.urls import path, reverse
+from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
 import csv
 import json
@@ -62,6 +63,8 @@ from .tasks import backfill_contract_events, dispatch_webhook
 class BackfillActionForm(ActionForm):
     from_ledger = forms.IntegerField(min_value=1, required=False, label="From ledger")
     to_ledger = forms.IntegerField(min_value=1, required=False, label="To ledger")
+    pause_reason = forms.CharField(required=False, label="Pause reason")
+    resume_at = forms.DateTimeField(required=False, label="Resume at (optional)")
 
 
 class AdminAuditMixin:
@@ -235,6 +238,7 @@ class TrackedContractAdmin(AdminAuditMixin, admin.ModelAdmin):
         "owner",
         "team",
         "is_active",
+        "is_paused",
         "deprecation_status",
         "event_filter_type",
         "max_events_per_minute",
@@ -242,17 +246,33 @@ class TrackedContractAdmin(AdminAuditMixin, admin.ModelAdmin):
         "event_count",
         "created_at",
     ]
-    list_filter = ["is_active", "network", "deprecation_status", "event_filter_type", "created_at"]
+    list_filter = [
+        "is_active",
+        "is_paused",
+        "network",
+        "deprecation_status",
+        "event_filter_type",
+        "created_at",
+    ]
     search_fields = ["name", "alias", "contract_id"]
-    readonly_fields = ["created_at", "updated_at"]
+    readonly_fields = ["created_at", "updated_at", "paused_at"]
     ordering = ["-created_at", "name"]
     action_form = BackfillActionForm
-    actions = ["backfill_events", "clear_cache"]
+    actions = ["backfill_events", "clear_cache", "pause_contracts", "resume_contracts"]
     fieldsets = (
         (None, {
             "fields": (
                 "contract_id", "name", "alias", "description",
                 "owner", "team", "network", "is_active",
+            ),
+        }),
+        ("Pause / Suspension", {
+            "fields": ("is_paused", "paused_at", "pause_reason", "resume_at"),
+            "description": (
+                "Paused contracts stop receiving new events but keep all "
+                "historical data queryable. Use the 'Pause selected contracts' "
+                "/ 'Resume selected contracts' actions below to change this "
+                "(so webhook notifications and timestamps are set correctly)."
             ),
         }),
         ("Event Filtering", {
@@ -402,6 +422,36 @@ class TrackedContractAdmin(AdminAuditMixin, admin.ModelAdmin):
         self.message_user(
             request,
             f"Cache cleared for {cleared} contract(s).",
+            level=messages.SUCCESS,
+        )
+
+    @admin.action(description="Pause selected contracts")
+    def pause_contracts(self, request, queryset):
+        reason = request.POST.get("pause_reason", "")
+        resume_at_raw = request.POST.get("resume_at")
+        resume_at = parse_datetime(resume_at_raw) if resume_at_raw else None
+
+        paused = 0
+        for contract in queryset:
+            contract.pause(reason=reason, resume_at=resume_at)
+            paused += 1
+
+        self.message_user(
+            request,
+            f"Paused {paused} contract(s).",
+            level=messages.SUCCESS,
+        )
+
+    @admin.action(description="Resume selected contracts")
+    def resume_contracts(self, request, queryset):
+        resumed = 0
+        for contract in queryset:
+            contract.resume()
+            resumed += 1
+
+        self.message_user(
+            request,
+            f"Resumed {resumed} contract(s).",
             level=messages.SUCCESS,
         )
 

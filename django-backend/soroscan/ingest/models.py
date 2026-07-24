@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator
 from django.db import models
+from django.utils import timezone
 from django.utils.text import slugify
 
 User = get_user_model()
@@ -387,6 +388,30 @@ class TrackedContract(models.Model):
         help_text="Custom attributes for storing contract metadata (team, owner, cost center, etc.)",
     )
 
+    # ---------------------------------------------------------------------------
+    # Pause / suspension (maintenance and incident response)
+    # ---------------------------------------------------------------------------
+    is_paused = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="When true, ingestion is suspended; historical data stays queryable.",
+    )
+    paused_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this contract was paused.",
+    )
+    pause_reason = models.TextField(
+        blank=True,
+        default="",
+        help_text="Audit trail: why this contract was paused.",
+    )
+    resume_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="If set, the contract auto-resumes at this time.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -396,6 +421,7 @@ class TrackedContract(models.Model):
             models.Index(fields=["contract_id", "is_active"]),
             models.Index(fields=["alias"]),
             models.Index(fields=["network", "is_active"]),
+            models.Index(fields=["is_paused", "resume_at"]),
         ]
 
     def __str__(self):
@@ -425,6 +451,38 @@ class TrackedContract(models.Model):
         if self.event_filter_type == self.FILTER_BLACKLIST:
             return event_type not in (self.event_filter_list or [])
         return True
+
+    def pause(self, reason: str = "", resume_at=None) -> None:
+        """
+        Suspend indexing for this contract while keeping historical data intact.
+
+        New events stop being ingested (see ``ingest_latest_events``); already
+        indexed events remain queryable. If *resume_at* is given, the contract
+        auto-resumes at that time via ``auto_resume_paused_contracts``.
+        """
+        self.is_paused = True
+        self.paused_at = timezone.now()
+        self.pause_reason = reason
+        self.resume_at = resume_at
+        self.save(update_fields=["is_paused", "paused_at", "pause_reason", "resume_at"])
+
+        from .tasks import notify_contract_pause_state  # noqa: PLC0415
+
+        notify_contract_pause_state.delay(self.contract_id, "paused", reason=reason)
+
+    def resume(self) -> None:
+        """Resume indexing for a previously paused contract."""
+        was_paused = self.is_paused
+        self.is_paused = False
+        self.paused_at = None
+        self.pause_reason = ""
+        self.resume_at = None
+        self.save(update_fields=["is_paused", "paused_at", "pause_reason", "resume_at"])
+
+        if was_paused:
+            from .tasks import notify_contract_pause_state  # noqa: PLC0415
+
+            notify_contract_pause_state.delay(self.contract_id, "resumed")
 
 
 class ContractInvocation(models.Model):

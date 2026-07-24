@@ -1254,6 +1254,72 @@ def ping_webhook(self, subscription_id: int) -> dict:
         return {"success": False, "error": str(exc)}
 
 
+@shared_task(name="ingest.tasks.notify_contract_pause_state", bind=True)
+def notify_contract_pause_state(
+    self, contract_id: str, state: str, reason: str = ""
+) -> int:
+    """
+    Notify all active webhooks for a contract that it was paused or resumed.
+
+    This is a lifecycle notification, not a chain event, so it is delivered
+    to every active subscription regardless of the subscription's
+    ``event_type``/``filter_condition`` (those filter contract *events*, not
+    system-level state changes). Best-effort like ``ping_webhook`` — a failed
+    delivery is logged but does not retry or affect the pause/resume itself.
+    """
+    payload = {
+        "type": f"contract.{state}",
+        "contract_id": contract_id,
+        "reason": reason,
+        "timestamp": timezone.now().isoformat(),
+    }
+    payload_bytes = json.dumps(payload, sort_keys=True).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "X-SoroScan-Event": f"contract.{state}",
+    }
+
+    webhooks = WebhookSubscription.objects.filter(
+        contract__contract_id=contract_id,
+        is_active=True,
+        status=WebhookSubscription.STATUS_ACTIVE,
+    )
+    notified = 0
+    for webhook in webhooks:
+        try:
+            requests.post(
+                webhook.target_url,
+                data=payload_bytes,
+                headers=headers,
+                timeout=webhook.timeout_seconds,
+            )
+            notified += 1
+        except requests.RequestException as exc:
+            logger.warning(
+                "Contract %s notification to webhook %s failed: %s",
+                state,
+                webhook.id,
+                exc,
+                extra={"webhook_id": webhook.id, "contract_id": contract_id},
+            )
+    return notified
+
+
+@shared_task(name="ingest.tasks.auto_resume_paused_contracts")
+def auto_resume_paused_contracts() -> int:
+    """Resume any paused contract whose scheduled ``resume_at`` has passed."""
+    due = TrackedContract.objects.filter(
+        is_paused=True,
+        resume_at__isnull=False,
+        resume_at__lte=timezone.now(),
+    )
+    resumed = 0
+    for contract in due:
+        contract.resume()
+        resumed += 1
+    return resumed
+
+
 # ---------------------------------------------------------------------------
 # Private helpers for dispatch_webhook
 # ---------------------------------------------------------------------------
@@ -2025,7 +2091,7 @@ def ingest_latest_events() -> int:
             BlacklistedContract.objects.values_list("contract_id", flat=True)
         )
         all_active_ids = list(
-            TrackedContract.objects.filter(is_active=True).values_list(
+            TrackedContract.objects.filter(is_active=True, is_paused=False).values_list(
                 "contract_id", flat=True
             )
         )

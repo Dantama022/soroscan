@@ -375,6 +375,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "ingest.tasks.snapshot_contract_state",
         "schedule": 600,  # every 10 minutes
     },
+    "auto-resume-paused-contracts": {
+        "task": "ingest.tasks.auto_resume_paused_contracts",
+        "schedule": 300,  # every 5 minutes
+    },
 }
 
 # Data Retention Configuration
