@@ -963,6 +963,7 @@ def webhook_signing_public_key_view(request):
 )
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@throttle_classes([])
 def health_check(request):
     """Health check endpoint."""
     return Response({"status": "healthy", "service": "soroscan"})
