@@ -32,9 +32,10 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
 
       - name: Create Pull Request
+        if: github.ref_type == 'branch'
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_PAT }}
           commit-message: "chore(changelog): update changelog"
           title: "chore(changelog): Update Changelog"
           body: |
