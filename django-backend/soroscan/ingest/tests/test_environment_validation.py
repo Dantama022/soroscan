@@ -18,8 +18,9 @@ class TestEnvironmentValidation:
                 # Ensure DJANGO_SETTINGS_MODULE doesn't trigger _running_tests=True
                 os.environ["DJANGO_SETTINGS_MODULE"] = "soroscan.settings"
                 
-                with pytest.raises(ImproperlyConfigured) as exc_info:
-                    importlib.reload(soroscan.settings)
+                with mock.patch("environ.Env.read_env"):
+                    with pytest.raises(ImproperlyConfigured) as exc_info:
+                        importlib.reload(soroscan.settings)
                 
                 assert "Required environment variable" in str(exc_info.value)
                 assert "SECRET_KEY" in str(exc_info.value)
@@ -36,4 +37,5 @@ class TestEnvironmentValidation:
                 os.environ["SOROSCAN_CONTRACT_ID"] = "CC..."
                 
                 # Should not raise
-                importlib.reload(soroscan.settings)
+                with mock.patch("environ.Env.read_env"):
+                    importlib.reload(soroscan.settings)

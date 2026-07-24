@@ -1,6 +1,7 @@
 """
 Test settings for SoroScan project.
 """
+from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -141,7 +142,7 @@ REST_FRAMEWORK = {
     },
 }
 
-from datetime import timedelta
+
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),

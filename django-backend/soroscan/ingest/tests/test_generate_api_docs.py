@@ -11,7 +11,6 @@ from django.core.management import call_command
 from soroscan.ingest.management.commands.generate_api_docs import (
     EndpointDoc,
     QueryParam,
-    RequestBodyField,
     ResponseCode,
     _parse_docstring,
     collect_endpoints,
@@ -145,7 +144,7 @@ class TestCollectEndpoints:
     def test_health_endpoint_uses_view_docstring(self):
         docs = collect_endpoints()
         health = next(
-            (doc for doc in docs if doc.name == "health-check" or "health" in doc.path),
+            (doc for doc in docs if doc.name == "health-check"),
             None,
         )
         assert health is not None

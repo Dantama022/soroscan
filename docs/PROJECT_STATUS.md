@@ -543,7 +543,7 @@ GET /ready   → Checks DB and Redis connectivity
 
 ### For New Contributors
 
-1. **Pick a beginner issue** from `ALT_ISSUES.md` (B1-B20 or F1-F20)
+1. **Pick a beginner issue** from `backlogs/ALT_ISSUES.md` (B1-B20 or F1-F20)
 2. **Read the issue** — all have clear acceptance criteria
 3. **Set up dev environment** — see Development Setup above
 4. **Create a branch:** `git checkout -b fix/issue-name`
@@ -552,7 +552,7 @@ GET /ready   → Checks DB and Redis connectivity
 
 ### For Experienced Contributors
 
-1. **Choose from** `ISSUES.md` (strategic issues #95-#106 or core features)
+1. **Choose from** `backlogs/ISSUES.md` (strategic issues #95-#106 or core features)
 2. **Understand dependencies** — each issue lists what it depends on
 3. **Communicate progress** — update issue with status
 4. **Follow patterns** — check existing code for style/architecture
@@ -638,12 +638,12 @@ GET /ready   → Checks DB and Redis connectivity
 ## Resources
 
 ### Documentation
-- 📖 [README.md](README.md) — Project overview
-- 🔧 [Getting Started](docs/getting-started.md)
-- 📋 [Issues Backlog](ISSUES.md) — 106 backend issues
-- 🎨 [Frontend Issues](FRONTEND_ISSUES.md) — 62 frontend issues
-- 👶 [Beginner Issues](ALT_ISSUES.md) — 40 onboarding issues
-- 🎯 [Contributing](CONTRIBUTING.md)
+- 📖 [README.md](../README.md) — Project overview
+- 🔧 [Getting Started](getting-started.md)
+- 📋 [Issues Backlog](../backlogs/ISSUES.md) — 106 backend issues
+- 🎨 [Frontend Issues](../backlogs/FRONTEND_ISSUES.md) — 62 frontend issues
+- 👶 [Beginner Issues](../backlogs/ALT_ISSUES.md) — 40 onboarding issues
+- 🎯 [Contributing](../CONTRIBUTING.md)
 
 ### APIs
 - GraphQL: http://localhost:8000/graphql

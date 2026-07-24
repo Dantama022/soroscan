@@ -72,11 +72,10 @@ describe("CodeBlock", () => {
 
     await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(source);
+      expect(
+        screen.getByRole("button", { name: /copied to clipboard/i }),
+      ).toBeInTheDocument();
     });
-
-    expect(
-      screen.getByRole("button", { name: /copied to clipboard/i }),
-    ).toBeInTheDocument();
   });
 
   it("resets copied state after 2 seconds", async () => {

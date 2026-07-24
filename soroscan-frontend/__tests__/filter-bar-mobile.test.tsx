@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { FilterBar } from "@/app/dashboard/components/FilterBar";
 
 jest.mock("@/components/ingest/graphql", () => ({
@@ -45,10 +45,9 @@ describe("FilterBar mobile drawer", () => {
 
     fireEvent.click(screen.getByTestId("filter-panel-toggle"));
 
-    expect(
-      screen.getByRole("dialog", { name: /event filters/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText(/contract/i)).toBeInTheDocument();
+    const drawer = screen.getByRole("dialog", { name: /event filters/i });
+    expect(drawer).toBeInTheDocument();
+    expect(drawer.querySelector("#contract-select")).toBeInTheDocument();
   });
 
   it("shows active filter count badge when filters are set", () => {

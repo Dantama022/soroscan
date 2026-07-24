@@ -59,7 +59,7 @@ describe("EmptyState Component", () => {
 
   it("renders without optional elements", () => {
     render(<EmptyState data-testid="empty-state-root" />);
-    expect(screen.getByTestId("empty-state")).toBeInTheDocument();
+    expect(screen.getByTestId("empty-state-root")).toBeInTheDocument();
   });
 
   it("renders custom icon and action href", () => {
@@ -88,7 +88,7 @@ describe("EmptyState Component", () => {
       />,
     );
 
-    const root = screen.getByTestId("empty-state");
+    const root = screen.getByTestId("terminal-empty");
     expect(root).toHaveAttribute("data-variant", "terminal");
     expect(root).toHaveClass("font-terminal-mono");
     expect(screen.getByRole("heading", { name: "No events" })).toHaveClass(
