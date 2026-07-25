@@ -387,11 +387,12 @@ class TestDispatchWebhook:
             resp_lib.POST, webhook.target_url,
             json={"error": "unavailable"}, status=503,
         )
-        mock_req = MagicMock()
-        mock_req.retries = dispatch_webhook.max_retries
-        with patch.object(dispatch_webhook, "request", mock_req):
+        dispatch_webhook.push_request(retries=dispatch_webhook.max_retries)
+        try:
             with pytest.raises(Exception):
                 dispatch_webhook(webhook.id, event.id)
+        finally:
+            dispatch_webhook.pop_request()
         webhook.refresh_from_db()
         assert WebhookDeadLetter.objects.filter(subscription=webhook, event=event).exists()
         assert webhook.status == WebhookSubscription.STATUS_SUSPENDED

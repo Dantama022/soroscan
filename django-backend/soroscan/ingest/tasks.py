@@ -4081,9 +4081,3 @@ def detect_contract_upgrades() -> dict[str, Any]:
             ).update(valid_to_ledger=ledger - 1)
 
     return summary
-
-# Ensure request attribute exists on the task object so tests can patch.object it
-try:
-    dispatch_webhook.request = None
-except NameError:
-    pass
