@@ -2956,6 +2956,32 @@ def _get_field(data: dict, dotted_path: str):
     return current
 
 
+def _as_number(v):
+    """Coerce a value to float for numeric comparison, or None if not numeric.
+
+    Booleans are excluded even though ``bool`` is a subclass of ``int`` in
+    Python — otherwise ``True`` would numerically equal ``1``/``"1"``.
+    """
+    if isinstance(v, bool):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _values_equal(current, value) -> bool:
+    """Compare two operands, treating numerically-equal values (e.g. the int
+    ``1000``, the float ``1000.0``, and the Decimal ``1000.00`` produced by a
+    model field) as equal regardless of representation. Falls back to string
+    comparison for non-numeric operands.
+    """
+    lhs_num, rhs_num = _as_number(current), _as_number(value)
+    if lhs_num is not None and rhs_num is not None:
+        return lhs_num == rhs_num
+    return str(current) == str(value)
+
+
 def evaluate_condition(condition: dict, event_data: dict) -> bool:
     """
     Evaluate a JSON condition AST against flattened event data.
@@ -2982,13 +3008,9 @@ def evaluate_condition(condition: dict, event_data: dict) -> bool:
     current = _get_field(event_data, field)
 
     if op == "eq":
-        return (
-            str(current) == str(value)
-            if current is not None
-            else str(None) == str(value)
-        )
+        return _values_equal(current, value)
     if op == "neq":
-        return str(current) != str(value)
+        return not _values_equal(current, value)
     if op in ("gt", "gte", "lt", "lte"):
         try:
             lhs, rhs = float(str(current)), float(str(value))
@@ -3007,9 +3029,9 @@ def evaluate_condition(condition: dict, event_data: dict) -> bool:
     if op == "startswith":
         return str(current).startswith(str(value)) if current is not None else False
     if op == "in":
-        return (
-            current in value if isinstance(value, list) else str(current) == str(value)
-        )
+        if isinstance(value, list):
+            return any(_values_equal(current, item) for item in value)
+        return _values_equal(current, value)
     if op == "regex":
         if current is None:
             return False

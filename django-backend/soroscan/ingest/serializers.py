@@ -29,6 +29,65 @@ from .models import (
 _CONTRACT_ID_RE = re.compile(r"^C[A-Z2-7]{55}$")
 _VALID_NETWORKS = {choice[0] for choice in TrackedContract.Network.choices}
 
+_FILTER_CONDITION_LOGICAL_OPS = {"and", "or"}
+_FILTER_CONDITION_COMPARISON_OPS = {
+    "eq",
+    "neq",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "contains",
+    "startswith",
+    "in",
+    "regex",
+}
+
+
+def _validate_filter_condition_node(condition, path="filter_condition"):
+    """Recursively validate a webhook filter_condition JSON AST node.
+
+    Mirrors the operators handled by ``evaluate_condition`` in tasks.py so a
+    typo'd or unsupported operator is rejected at write time instead of
+    silently evaluating to "no match" at dispatch time.
+    """
+    if not isinstance(condition, dict):
+        raise serializers.ValidationError({path: "Each condition must be an object."})
+
+    op = (condition.get("op") or "").lower()
+
+    if op == "not":
+        sub = condition.get("condition")
+        if not isinstance(sub, dict):
+            raise serializers.ValidationError(
+                {path: "'not' requires a nested 'condition' object."}
+            )
+        _validate_filter_condition_node(sub, f"{path}.condition")
+        return
+
+    if op in _FILTER_CONDITION_LOGICAL_OPS:
+        subs = condition.get("conditions")
+        if not isinstance(subs, list) or not subs:
+            raise serializers.ValidationError(
+                {path: f"'{op}' requires a non-empty 'conditions' list."}
+            )
+        for idx, sub in enumerate(subs):
+            _validate_filter_condition_node(sub, f"{path}.conditions[{idx}]")
+        return
+
+    if op not in _FILTER_CONDITION_COMPARISON_OPS:
+        raise serializers.ValidationError(
+            {path: f"Unknown operator '{condition.get('op')}'."}
+        )
+
+    if not condition.get("field"):
+        raise serializers.ValidationError(
+            {path: f"'{op}' requires a non-empty 'field'."}
+        )
+
+    if "value" not in condition:
+        raise serializers.ValidationError({path: f"'{op}' requires a 'value'."})
+
 
 class OrganizationSerializer(serializers.ModelSerializer):
     """Organization serializer with owner-managed tenancy settings."""
@@ -389,7 +448,8 @@ class WebhookSubscriptionSerializer(serializers.ModelSerializer):
             return value
         if not isinstance(value, dict):
             raise serializers.ValidationError("filter_condition must be an object.")
-
+        _validate_filter_condition_node(value)
+        return value
 
     def validate(self, attrs):
             contract = attrs.get("contract")
