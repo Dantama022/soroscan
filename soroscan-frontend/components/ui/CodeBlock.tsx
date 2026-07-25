@@ -10,6 +10,8 @@ import {
   type CodeBlockLanguage,
 } from "./syntax-highlight";
 
+export type { CodeBlockLanguage };
+
 export interface CodeBlockProps {
   /** Raw source code to display. */
   code: string;

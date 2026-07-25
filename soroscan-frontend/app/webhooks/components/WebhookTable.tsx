@@ -134,7 +134,8 @@ function WebhookCard({
             <WebhookDeliveryStatusBadge
               state={getDeliveryState(
                 wh.isActive ?? true,
-                wh.lastDeliverySuccess ?? wh.lastStatusCode ? wh.lastStatusCode < 300 : true,
+                wh.lastDeliverySuccess ??
+                  (wh.lastStatusCode !== undefined ? wh.lastStatusCode < 300 : true),
                 wh.failureCount ?? 0
               )}
               lastDeliveryTime={wh.lastDelivery}

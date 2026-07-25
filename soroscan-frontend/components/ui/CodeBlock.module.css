@@ -134,60 +134,66 @@
   word-break: break-word;
 }
 
-/* Syntax token colours (Prism / Highlight.js compatible categories) */
-:global(.tok-keyword) {
+/*
+ * Syntax token colours (Prism / Highlight.js compatible categories).
+ * Nested under .body (a local/scoped class) so each :global() selector
+ * satisfies CSS Modules' "pure selector" rule under the webpack build
+ * (`next build --webpack`, used by the bundle analyzer) — a bare top-level
+ * :global(...) selector is rejected as impure.
+ */
+.body :global(.tok-keyword) {
   color: #00d4ff;
 }
 
-:global(.tok-string) {
+.body :global(.tok-string) {
   color: #a8ff78;
 }
 
-:global(.tok-comment) {
+.body :global(.tok-comment) {
   color: #4a5568;
   font-style: italic;
 }
 
-:global(.tok-number) {
+.body :global(.tok-number) {
   color: #ffaa00;
 }
 
-:global(.tok-boolean) {
+.body :global(.tok-boolean) {
   color: #ff66ff;
   font-weight: 600;
 }
 
-:global(.tok-null) {
+.body :global(.tok-null) {
   color: #888;
   font-style: italic;
 }
 
-:global(.tok-function) {
+.body :global(.tok-function) {
   color: #00ff41;
 }
 
-:global(.tok-property) {
+.body :global(.tok-property) {
   color: #00ff9c;
   font-weight: 500;
 }
 
-:global(.tok-punctuation) {
+.body :global(.tok-punctuation) {
   color: #8892a4;
 }
 
-:global(.tok-operator) {
+.body :global(.tok-operator) {
   color: #00d4ff;
 }
 
-:global(.tok-type) {
+.body :global(.tok-type) {
   color: #a855f7;
 }
 
-:global(.tok-variable) {
+.body :global(.tok-variable) {
   color: #e2e8f0;
 }
 
-:global(.tok-meta) {
+.body :global(.tok-meta) {
   color: #7ba8b5;
 }
 
