@@ -2399,3 +2399,307 @@ class StateChange(models.Model):
 
     def __str__(self):
         return f"{self.change_type} {self.field_name}"
+
+
+# ---------------------------------------------------------------------------
+# Contract Health Checks
+# ---------------------------------------------------------------------------
+
+class ContractHealthCheck(models.Model):
+    """
+    Tracks the indexing health of a single TrackedContract.
+
+    Updated by the ``check_contract_health`` Celery periodic task every 5 min.
+    Status transitions:
+      - healthy  → no stale events, no ABI decode spike
+      - degraded → no new events for >HEALTH_DEGRADED_MINUTES (default 30 min)
+                   OR ABI decode errors exceed HEALTH_ABI_ERROR_THRESHOLD (default 5)
+      - failed   → no new events for >HEALTH_FAILED_MINUTES (default 120 min)
+    """
+
+    class Status(models.TextChoices):
+        HEALTHY = "healthy", "Healthy"
+        DEGRADED = "degraded", "Degraded"
+        FAILED = "failed", "Failed"
+
+    contract = models.OneToOneField(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="health_check",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.HEALTHY,
+        db_index=True,
+    )
+    last_event_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of the most recently indexed event for this contract",
+    )
+    minutes_since_last_event = models.IntegerField(
+        default=0,
+        help_text="Minutes elapsed since the last indexed event",
+    )
+    abi_decode_errors_1h = models.IntegerField(
+        default=0,
+        help_text="Number of ABI decode failures in the last hour",
+    )
+    consecutive_failures = models.IntegerField(
+        default=0,
+        help_text="Number of consecutive health check runs that returned non-healthy",
+    )
+    error_message = models.TextField(
+        blank=True,
+        help_text="Human-readable description of the current health issue",
+    )
+    checked_at = models.DateTimeField(
+        auto_now=True,
+        db_index=True,
+        help_text="Timestamp of the last health check run",
+    )
+
+    class Meta:
+        verbose_name = "Contract Health Check"
+        verbose_name_plural = "Contract Health Checks"
+        ordering = ["-checked_at"]
+        indexes = [
+            models.Index(
+                fields=["status", "checked_at"],
+                name="ingest_cont_status_checked_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"HealthCheck({self.contract.contract_id[:8]}…, {self.status})"
+
+    @property
+    def is_healthy(self) -> bool:
+        return self.status == self.Status.HEALTHY
+
+
+# ---------------------------------------------------------------------------
+# Analytics — pre-computed event aggregations
+# ---------------------------------------------------------------------------
+
+class EventAggregation(models.Model):
+    """
+    Pre-computed hourly event counts per contract / event_type bucket.
+
+    Written by the ``aggregate_event_statistics`` Celery task (hourly).
+    The API layer reads exclusively from this table for analytics queries,
+    keeping response time well under 500 ms even over a 1-year window.
+
+    Granularity is always *1 hour* at storage time. The API can roll up to
+    daily / weekly / monthly in Python by grouping on truncated timestamps.
+    """
+
+    contract = models.ForeignKey(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="aggregations",
+        db_index=True,
+    )
+    # Empty string means the row is a contract-level total across all types.
+    event_type = models.CharField(
+        max_length=128,
+        db_index=True,
+        help_text="Event type name, or '' for the per-contract total bucket.",
+    )
+    # Always truncated to the start of the hour (minute=0, second=0, microsecond=0).
+    timestamp = models.DateTimeField(
+        db_index=True,
+        help_text="Start of the 1-hour bucket (UTC, minute=0).",
+    )
+    event_count = models.IntegerField(
+        default=0,
+        help_text="Number of events in this contract/event_type/hour bucket.",
+    )
+    # Anomaly flag written by the task when the hourly count drops by >ANOMALY_DROP_PCT%
+    # compared to the same hour in the prior 7-day rolling average.
+    is_anomaly = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True when this bucket triggered a volume-drop anomaly alert.",
+    )
+
+    class Meta:
+        unique_together = ("contract", "event_type", "timestamp")
+        indexes = [
+            models.Index(fields=["contract", "timestamp"]),
+            models.Index(fields=["timestamp"]),
+            models.Index(fields=["contract", "event_type", "timestamp"]),
+        ]
+        ordering = ["-timestamp"]
+
+    def __str__(self) -> str:
+        label = self.event_type or "<total>"
+        return (
+            f"EventAggregation({self.contract.contract_id[:8]}…,"
+            f" {label}, {self.timestamp:%Y-%m-%d %H:00}, count={self.event_count})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Transaction cost tracking
+# ---------------------------------------------------------------------------
+
+class TransactionCost(models.Model):
+    """
+    Per-transaction Soroban fee and resource usage record.
+
+    Created by the ingest pipeline after every successfully-fetched
+    ``ContractInvocation``.  The ``analyze_transaction_costs`` Celery task
+    reads these rows to build pre-computed cost aggregations and flag outliers.
+
+    Fee units: all fee fields are in **stroops** (1 XLM = 10,000,000 stroops).
+    Resource units: instructions (CPU cycles), read/write byte counts.
+    """
+
+    contract = models.ForeignKey(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="transaction_costs",
+        db_index=True,
+    )
+    # Links to the ContractInvocation record when one was created for this tx.
+    invocation = models.OneToOneField(
+        ContractInvocation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cost",
+    )
+    tx_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+    )
+    function_name = models.CharField(
+        max_length=128,
+        blank=True,
+        db_index=True,
+        help_text="Contract function name (empty if not determinable from RPC)",
+    )
+    ledger_sequence = models.PositiveBigIntegerField(
+        db_index=True,
+    )
+    # ── Fees (stroops) ────────────────────────────────────────────────────────
+    total_fee_stroops = models.BigIntegerField(
+        default=0,
+        help_text="Total fee charged for the transaction in stroops",
+    )
+    inclusion_fee_stroops = models.BigIntegerField(
+        default=0,
+        help_text="Base inclusion / network fee portion in stroops",
+    )
+    resource_fee_stroops = models.BigIntegerField(
+        default=0,
+        help_text="Soroban resource fee portion in stroops",
+    )
+    # ── Resource usage ────────────────────────────────────────────────────────
+    cpu_instructions_used = models.BigIntegerField(
+        default=0,
+        help_text="CPU instructions consumed (Soroban compute units)",
+    )
+    memory_bytes_used = models.BigIntegerField(
+        default=0,
+        help_text="Memory bytes used by the Soroban host",
+    )
+    read_bytes_used = models.BigIntegerField(
+        default=0,
+        help_text="Ledger-entry read bytes",
+    )
+    write_bytes_used = models.BigIntegerField(
+        default=0,
+        help_text="Ledger-entry write bytes",
+    )
+    # ── Outlier flag ─────────────────────────────────────────────────────────
+    is_outlier = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            "True when total_fee_stroops exceeds mean + 2 × std-dev "
+            "for the same (contract, function_name) group"
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["contract", "created_at"],
+                         name="ingest_tc_ctr_cat_idx"),
+            models.Index(fields=["contract", "function_name", "created_at"],
+                         name="ingest_tc_ctr_fn_cat_idx"),
+            models.Index(fields=["function_name"],
+                         name="ingest_tc_fn_idx"),
+            models.Index(fields=["is_outlier", "created_at"],
+                         name="ingest_tc_outlier_idx"),
+        ]
+
+    def __str__(self) -> str:
+        fn = self.function_name or "<unknown>"
+        xlm = self.total_fee_stroops / 10_000_000
+        return (
+            f"TxCost({self.tx_hash[:8]}…, {fn}, "
+            f"{xlm:.7f} XLM)"
+        )
+
+    @property
+    def total_fee_xlm(self) -> float:
+        """Convert stroops to XLM for display."""
+        return self.total_fee_stroops / 10_000_000
+
+
+class TransactionCostAggregation(models.Model):
+    """
+    Pre-computed hourly cost aggregates per (contract, function_name) bucket.
+
+    Written by ``analyze_transaction_costs`` (hourly).
+    Queried by ``CostAnalyticsViewSet`` for sub-500 ms API responses.
+    """
+
+    contract = models.ForeignKey(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="cost_aggregations",
+        db_index=True,
+    )
+    # Empty string means the row is a contract-level total across all functions.
+    function_name = models.CharField(
+        max_length=128,
+        db_index=True,
+        help_text="Function name, or '' for the contract-level total bucket.",
+    )
+    # Truncated to the start of the hour.
+    timestamp = models.DateTimeField(
+        db_index=True,
+        help_text="Start of the 1-hour bucket (UTC).",
+    )
+    call_count = models.IntegerField(default=0)
+    avg_fee_stroops = models.BigIntegerField(default=0)
+    min_fee_stroops = models.BigIntegerField(default=0)
+    max_fee_stroops = models.BigIntegerField(default=0)
+    total_fee_stroops = models.BigIntegerField(default=0)
+    avg_cpu_instructions = models.BigIntegerField(default=0)
+    avg_memory_bytes = models.BigIntegerField(default=0)
+    outlier_count = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ("contract", "function_name", "timestamp")
+        indexes = [
+            models.Index(fields=["contract", "timestamp"],
+                         name="ingest_tca_contract_ts_idx"),
+            models.Index(fields=["timestamp"],
+                         name="ingest_tca_timestamp_idx"),
+        ]
+        ordering = ["-timestamp"]
+
+    def __str__(self) -> str:
+        fn = self.function_name or "<total>"
+        return (
+            f"CostAgg({self.contract.contract_id[:8]}…, {fn}, "
+            f"{self.timestamp:%Y-%m-%d %H:00})"
+        )

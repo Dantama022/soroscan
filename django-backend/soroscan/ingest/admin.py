@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
 import csv
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests as http_requests
 import hashlib
 
@@ -28,6 +28,7 @@ from .models import (
     ContractDependency,
     ContractDeployment,
     ContractEvent,
+    ContractHealthCheck,
     ContractSnapshot,
     DependencyImpactAssessment,
     ContractMetadata,
@@ -38,6 +39,7 @@ from .models import (
     ContractVerification,
     DataDeletionRequest,
     DataRetentionPolicy,
+    EventAggregation,
     EventSchema,
     IndexerState,
     IngestError,
@@ -1558,3 +1560,288 @@ class StateChangeAdmin(admin.ModelAdmin):
         "change_type",
         "created_at",
     ]
+
+
+# ---------------------------------------------------------------------------
+# Contract Health Checks
+# ---------------------------------------------------------------------------
+
+@admin.register(ContractHealthCheck)
+class ContractHealthCheckAdmin(AdminAuditMixin, admin.ModelAdmin):
+    """
+    Read-only view of contract indexing health.
+    Records are written by the ``check_contract_health`` Celery task every 5 minutes.
+    """
+
+    list_display = [
+        "contract_name",
+        "contract_id_short",
+        "network",
+        "status_colored",
+        "last_event_time",
+        "minutes_since_last_event",
+        "abi_decode_errors_1h",
+        "consecutive_failures",
+        "checked_at",
+    ]
+    list_filter = ["status", "contract__network", "checked_at"]
+    search_fields = ["contract__name", "contract__contract_id", "error_message"]
+    readonly_fields = [
+        "contract",
+        "status",
+        "last_event_time",
+        "minutes_since_last_event",
+        "abi_decode_errors_1h",
+        "consecutive_failures",
+        "error_message",
+        "checked_at",
+    ]
+    ordering = ["status", "-checked_at"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("contract")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="Contract")
+    def contract_name(self, obj):
+        return obj.contract.name
+
+    @admin.display(description="Contract ID")
+    def contract_id_short(self, obj):
+        cid = obj.contract.contract_id
+        return f"{cid[:8]}…{cid[-4:]}"
+
+    @admin.display(description="Network")
+    def network(self, obj):
+        return obj.contract.network
+
+    @admin.display(description="Status")
+    def status_colored(self, obj):
+        colors = {
+            "healthy": "#28a745",
+            "degraded": "#ffc107",
+            "failed": "#dc3545",
+        }
+        icons = {"healthy": "✓", "degraded": "⚠", "failed": "✗"}
+        color = colors.get(obj.status, "#6c757d")
+        icon = icons.get(obj.status, "?")
+        return format_html(
+            '<span style="color:{};font-weight:bold">{} {}</span>',
+            color,
+            icon,
+            obj.status.upper(),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Analytics — EventAggregation admin with custom dashboard view
+# ---------------------------------------------------------------------------
+
+@admin.register(EventAggregation)
+class EventAggregationAdmin(AdminAuditMixin, admin.ModelAdmin):
+    """
+    Read-only admin for pre-computed event aggregation buckets.
+
+    Includes a custom analytics dashboard page at
+    ``/admin/ingest/eventaggregation/dashboard/`` with top-10 contracts,
+    event-type breakdown, and a 7-day trend summary table.
+    """
+
+    list_display = [
+        "timestamp",
+        "contract_name",
+        "event_type_display",
+        "event_count",
+        "is_anomaly_badge",
+    ]
+    list_filter = ["is_anomaly", "contract__network", "timestamp"]
+    search_fields = ["contract__name", "contract__contract_id", "event_type"]
+    readonly_fields = ["contract", "event_type", "timestamp", "event_count", "is_anomaly"]
+    ordering = ["-timestamp"]
+    date_hierarchy = "timestamp"
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("contract")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="Contract")
+    def contract_name(self, obj):
+        return obj.contract.name
+
+    @admin.display(description="Event Type")
+    def event_type_display(self, obj):
+        return obj.event_type or format_html('<span style="color:#6c757d;font-style:italic">total</span>')
+
+    @admin.display(description="Anomaly")
+    def is_anomaly_badge(self, obj):
+        if obj.is_anomaly:
+            return format_html('<span style="color:#dc3545;font-weight:bold">⚠ YES</span>')
+        return format_html('<span style="color:#28a745">✓ no</span>')
+
+    # ── Custom dashboard view ─────────────────────────────────────────────────
+
+    def get_urls(self):
+        extra = [
+            path(
+                "dashboard/",
+                self.admin_site.admin_view(self._dashboard_view),
+                name="ingest_eventaggregation_dashboard",
+            ),
+        ]
+        return extra + super().get_urls()
+
+    def _dashboard_view(self, request):
+        """
+        Analytics dashboard at /admin/ingest/eventaggregation/dashboard/.
+
+        Renders stat widgets, a 7-day daily trend table, top-10 contracts,
+        and event-type breakdown — all from EventAggregation rows.
+        """
+        from django.utils import timezone as tz
+        from django.db.models import Sum
+
+        now = tz.now()
+        cutoff_24h = now - timedelta(hours=24)
+        cutoff_7d = now - timedelta(days=7)
+
+        # Stat widgets
+        total_events = EventAggregation.objects.filter(event_type="").aggregate(
+            t=Sum("event_count")
+        )["t"] or 0
+
+        events_24h = EventAggregation.objects.filter(
+            event_type="", timestamp__gte=cutoff_24h
+        ).aggregate(t=Sum("event_count"))["t"] or 0
+
+        events_7d = EventAggregation.objects.filter(
+            event_type="", timestamp__gte=cutoff_7d
+        ).aggregate(t=Sum("event_count"))["t"] or 0
+
+        anomalies_7d = EventAggregation.objects.filter(
+            is_anomaly=True, event_type="", timestamp__gte=cutoff_7d
+        ).count()
+
+        active_contracts = TrackedContract.objects.filter(is_active=True).count()
+
+        # 7-day daily trend (day → total events)
+        from django.db.models.functions import TruncDay
+        daily_trend = list(
+            EventAggregation.objects.filter(event_type="", timestamp__gte=cutoff_7d)
+            .annotate(day=TruncDay("timestamp"))
+            .values("day")
+            .annotate(count=Sum("event_count"))
+            .order_by("day")
+        )
+
+        # Top-10 contracts
+        top_contracts = list(
+            EventAggregation.objects.filter(event_type="", timestamp__gte=cutoff_7d)
+            .values("contract__name", "contract__contract_id")
+            .annotate(total=Sum("event_count"))
+            .order_by("-total")[:10]
+        )
+
+        # Event type breakdown (top 15)
+        type_breakdown = list(
+            EventAggregation.objects.exclude(event_type="")
+            .filter(timestamp__gte=cutoff_7d)
+            .values("event_type")
+            .annotate(total=Sum("event_count"))
+            .order_by("-total")[:15]
+        )
+
+        # Build the HTML response
+        def _stat_box(label, value, color="#212529"):
+            return (
+                f'<div style="display:inline-block;background:#f8f9fa;border:1px solid #dee2e6;'
+                f'border-radius:6px;padding:16px 24px;margin:8px;min-width:160px;text-align:center">'
+                f'<div style="font-size:28px;font-weight:bold;color:{color}">{value}</div>'
+                f'<div style="font-size:12px;color:#6c757d;margin-top:4px">{label}</div>'
+                f'</div>'
+            )
+
+        def _table_rows(rows, cols, col_labels):
+            ths = "".join(f"<th>{label}</th>" for label in col_labels)
+            trs = ""
+            for r in rows:
+                tds = "".join(f"<td>{r.get(c, '')}</td>" for c in cols)
+                trs += f"<tr>{tds}</tr>"
+            return f"<table><thead><tr>{ths}</tr></thead><tbody>{trs}</tbody></table>"
+
+        trend_html = _table_rows(
+            [{"Day": d["day"].strftime("%Y-%m-%d"), "Events": d["count"]} for d in daily_trend],
+            ["Day", "Events"],
+            ["Day", "Events"],
+        )
+
+        top_html = _table_rows(
+            [{"Contract": r["contract__name"], "ID": r["contract__contract_id"][:12] + "…", "Events (7d)": r["total"]} for r in top_contracts],
+            ["Contract", "ID", "Events (7d)"],
+            ["Contract", "Contract ID", "Events (7d)"],
+        )
+
+        type_html = _table_rows(
+            [{"Event Type": r["event_type"], "Count (7d)": r["total"]} for r in type_breakdown],
+            ["Event Type", "Count (7d)"],
+            ["Event Type", "Count (7d)"],
+        )
+
+        html = f"""
+<html><head>
+<title>Analytics Dashboard — SoroScan Admin</title>
+<link rel="stylesheet" type="text/css" href="/static/admin/css/base.css">
+<style>
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 24px; }}
+  th, td {{ border: 1px solid #dee2e6; padding: 8px 12px; text-align: left; }}
+  th {{ background: #f8f9fa; font-weight: 600; }}
+  tr:nth-child(even) td {{ background: #f8f9fa; }}
+  h2 {{ margin-top: 32px; }}
+</style>
+</head>
+<body id="django-admin">
+<div id="content-main">
+<h1>Analytics Dashboard</h1>
+<p>Pre-computed from <strong>EventAggregation</strong> hourly buckets.
+   <a href="../">← Back to list</a></p>
+
+<h2>Summary</h2>
+<div>
+{_stat_box("Total Events (all time)", "{:,}".format(total_events))}
+{_stat_box("Events (last 24 h)", "{:,}".format(events_24h), "#007bff")}
+{_stat_box("Events (last 7 d)", "{:,}".format(events_7d), "#6f42c1")}
+{_stat_box("Active Contracts", active_contracts, "#28a745")}
+{_stat_box("Anomalies (7 d)", anomalies_7d, "#dc3545" if anomalies_7d else "#28a745")}
+</div>
+
+<h2>7-Day Daily Trend</h2>
+{trend_html}
+
+<h2>Top 10 Contracts (7 d)</h2>
+{top_html}
+
+<h2>Event Type Breakdown (7 d)</h2>
+{type_html}
+
+<p style="color:#6c757d;font-size:12px;margin-top:32px">
+  Aggregations are updated hourly by the <code>aggregate_event_statistics</code> Celery task.
+  Export raw data via <code>GET /api/ingest/analytics/export/?format=csv</code>.
+</p>
+</div></body></html>
+"""
+        return HttpResponse(html)

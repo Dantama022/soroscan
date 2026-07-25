@@ -394,6 +394,22 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# Analytics — anomaly detection threshold
+# Volume drop percentage that triggers an anomaly flag on an aggregation bucket.
+# e.g. 50 means: flag the bucket if current count < 50 % of the 7-day rolling avg.
+ANALYTICS_ANOMALY_DROP_PCT = env.int("ANALYTICS_ANOMALY_DROP_PCT", default=50)
+# Minimum events in the rolling average before anomaly detection kicks in.
+# Prevents false positives on very low-traffic contracts.
+ANALYTICS_ANOMALY_MIN_BASELINE = env.int("ANALYTICS_ANOMALY_MIN_BASELINE", default=10)
+
+# Contract health check thresholds (configurable via environment)
+# Minutes without a new event before a contract is considered degraded
+HEALTH_DEGRADED_MINUTES = env.int("HEALTH_DEGRADED_MINUTES", default=30)
+# Minutes without a new event before a contract is considered failed
+HEALTH_FAILED_MINUTES = env.int("HEALTH_FAILED_MINUTES", default=120)
+# ABI decode error count in the last hour that triggers degraded status
+HEALTH_ABI_ERROR_THRESHOLD = env.int("HEALTH_ABI_ERROR_THRESHOLD", default=5)
+
 # Data Retention Configuration
 # Number of days to retain deduplication logs before cleanup
 DEDUP_LOG_RETENTION_DAYS = env("DEDUP_LOG_RETENTION_DAYS", default=90, cast=int)

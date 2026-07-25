@@ -543,3 +543,124 @@ class SorobanClient:
         if hasattr(value, "xdr"):
             return {"xdr": value.xdr}
         return str(value)
+
+    # ------------------------------------------------------------------
+    # Fee / resource extraction
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def extract_fee_data(tx_response: Any) -> dict[str, int]:
+        """
+        Extract Soroban fee and resource usage from a ``get_transaction`` response.
+
+        The Stellar RPC returns ``fee_charged`` (total fee in stroops) on the
+        top-level response object.  Detailed resource breakdown (CPU instructions,
+        memory, read/write bytes) lives inside the ``result_meta_xdr`` (or
+        ``resultMetaXdr``) SorobanTransactionMeta v3 structure.
+
+        This helper is intentionally defensive: it tries several attribute and
+        dict key variants produced by different stellar-sdk versions and falls
+        back gracefully to zeros.  The values it returns are always non-negative
+        integers measured in stroops (fees) or raw units (resources).
+
+        Returns a dict with keys:
+          total_fee_stroops, inclusion_fee_stroops, resource_fee_stroops,
+          cpu_instructions_used, memory_bytes_used,
+          read_bytes_used, write_bytes_used
+        """
+        result: dict[str, int] = {
+            "total_fee_stroops": 0,
+            "inclusion_fee_stroops": 0,
+            "resource_fee_stroops": 0,
+            "cpu_instructions_used": 0,
+            "memory_bytes_used": 0,
+            "read_bytes_used": 0,
+            "write_bytes_used": 0,
+        }
+
+        if tx_response is None:
+            return result
+
+        # ── Total fee ──────────────────────────────────────────────────
+        for attr in ("fee_charged", "feeCharged", "fee"):
+            val = _get_attr_or_key(tx_response, attr)
+            if val is not None:
+                try:
+                    result["total_fee_stroops"] = int(val)
+                except (TypeError, ValueError):
+                    pass
+                break
+
+        # ── Try to parse Soroban resource stats from result_meta_xdr ──
+        # stellar_sdk >= 8 exposes a typed `result_meta` with `.soroban_meta`
+        # Older versions expose raw XDR strings.
+        # We attempt the typed path first, then fall back.
+        try:
+            result_meta = (
+                _get_attr_or_key(tx_response, "result_meta")
+                or _get_attr_or_key(tx_response, "resultMeta")
+            )
+            if result_meta is not None:
+                soroban_meta = (
+                    _get_attr_or_key(result_meta, "soroban_meta")
+                    or _get_attr_or_key(result_meta, "sorobanMeta")
+                )
+                if soroban_meta is not None:
+                    resources = (
+                        _get_attr_or_key(soroban_meta, "resources")
+                        or _get_attr_or_key(soroban_meta, "v3")
+                    )
+                    if resources is not None:
+                        _set_int(result, "cpu_instructions_used", resources,
+                                 ("cpu_insns", "cpuInsns", "instructions", "cpuInstructions"))
+                        _set_int(result, "memory_bytes_used", resources,
+                                 ("mem_bytes", "memBytes", "memory", "memoryBytes"))
+                        _set_int(result, "read_bytes_used", resources,
+                                 ("read_bytes", "readBytes", "netReadBytes", "net_read_bytes"))
+                        _set_int(result, "write_bytes_used", resources,
+                                 ("write_bytes", "writeBytes", "netWriteBytes", "net_write_bytes"))
+
+                    # Resource fee is sometimes a sibling field on soroban_meta
+                    _set_int(result, "resource_fee_stroops", soroban_meta,
+                             ("resource_fee_refund", "resourceFeeRefund",
+                              "resource_fee", "resourceFee"))
+
+        except Exception:
+            # Any parse error → keep zeros; don't crash the ingest loop
+            pass
+
+        # Derive inclusion fee as the difference
+        result["inclusion_fee_stroops"] = max(
+            0, result["total_fee_stroops"] - result["resource_fee_stroops"]
+        )
+
+        return result
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers used by SorobanClient.extract_fee_data
+# ---------------------------------------------------------------------------
+
+def _get_attr_or_key(obj: Any, name: str) -> Any:
+    """Try attribute access then dict-key access; return None if neither works."""
+    val = getattr(obj, name, None)
+    if val is None and isinstance(obj, dict):
+        val = obj.get(name)
+    return val
+
+
+def _set_int(
+    result: dict[str, int],
+    key: str,
+    source: Any,
+    attr_names: tuple[str, ...],
+) -> None:
+    """Write the first non-None int found in *source* under any of *attr_names* to *result[key]*."""
+    for name in attr_names:
+        val = _get_attr_or_key(source, name)
+        if val is not None:
+            try:
+                result[key] = int(val)
+                return
+            except (TypeError, ValueError):
+                pass

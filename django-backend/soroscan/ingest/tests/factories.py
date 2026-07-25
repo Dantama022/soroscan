@@ -187,3 +187,19 @@ class ContractMetadataFactory(DjangoModelFactory):
     documentation_url = ""
     github_repo = ""
     team_email = ""
+
+
+class EventAggregationFactory(DjangoModelFactory):
+    class Meta:
+        model = "ingest.EventAggregation"
+
+    contract = factory.SubFactory(TrackedContractFactory)
+    event_type = "swap"
+    # Round to top of current hour
+    timestamp = factory.LazyFunction(
+        lambda: __import__("django.utils.timezone", fromlist=["now"]).now().replace(
+            minute=0, second=0, microsecond=0
+        )
+    )
+    event_count = 100
+    is_anomaly = False

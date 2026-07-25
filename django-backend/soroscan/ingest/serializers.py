@@ -630,3 +630,17 @@ class ContractSnapshotSerializer(serializers.ModelSerializer):
             "captured_at",
             "changes",
         ]
+
+
+class EventAggregationSerializer(serializers.Serializer):
+    """
+    Read-only serializer for a single pre-computed aggregation bucket.
+    Used by ``AnalyticsViewSet`` to return event-volume time-series data.
+    """
+
+    timestamp = serializers.DateTimeField()
+    contract_id = serializers.CharField()
+    contract_name = serializers.CharField()
+    event_type = serializers.CharField(allow_blank=True)
+    event_count = serializers.IntegerField()
+    is_anomaly = serializers.BooleanField()
