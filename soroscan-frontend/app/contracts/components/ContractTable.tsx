@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Star } from "lucide-react";
+import { Star, FileCode2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -12,8 +12,8 @@ import {
   TableRow,
 } from "@/components/terminal/Table";
 import { Button } from "@/components/terminal/Button";
+import { EmptyState, EmptyStateIcon } from "@/components/ui/empty-state";
 import type { Contract } from "@/components/ingest/contract-types";
-import { ContractEmptyState } from "./ContractEmptyState";
 import { useFavorites } from "@/lib/hooks/useFavorites";
 
 interface ContractTableProps {
@@ -36,7 +36,23 @@ export function ContractTable({ contracts, onDelete, onRegister, showFavoritesOn
   };
 
   if (filteredContracts.length === 0) {
-    return <ContractEmptyState onRegister={onRegister} />;
+    return (
+      <EmptyState
+        variant="terminal"
+        icon={
+          <EmptyStateIcon>
+            <FileCode2 className="h-8 w-8 text-terminal-green" />
+          </EmptyStateIcon>
+        }
+        title="No contracts found"
+        description="You are not tracking any contracts yet. Register a contract to begin."
+        action={{
+          label: "Register Contract",
+          onClick: onRegister,
+          terminalVariant: "primary",
+        }}
+      />
+    );
   }
 
   return (

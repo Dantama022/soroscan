@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { Trash2, FlaskConical, ChevronDown, ChevronUp } from "lucide-react"
+import { EmptyState, EmptyStateIcon } from "@/components/ui/empty-state"
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
   SortDirectionIndicator,
@@ -212,11 +213,16 @@ export function WebhookTable({ webhooks, onDelete, onTest, testingId, testResult
 
   if (webhooks.length === 0) {
     return (
-      <div className="border border-terminal-green/20 p-12 text-center font-terminal-mono space-y-3">
-        <div className="text-terminal-green text-2xl">[ ]</div>
-        <div className="text-terminal-gray text-sm">NO_SUBSCRIPTIONS_FOUND</div>
-        <div className="text-terminal-gray/50 text-xs">Create your first webhook to start receiving events</div>
-      </div>
+      <EmptyState
+        variant="terminal"
+        icon={
+          <EmptyStateIcon>
+            <div className="text-terminal-green text-2xl">[ ]</div>
+          </EmptyStateIcon>
+        }
+        title="NO_SUBSCRIPTIONS_FOUND"
+        description="Create your first webhook to start receiving events."
+      />
     )
   }
 
