@@ -62,6 +62,12 @@ soroscan/
 
 ---
 
+## Environment Configuration
+
+See [ENVIRONMENT.md](ENVIRONMENT.md) for the complete list of required and optional environment variables, their types and defaults, and development, testing, and production examples.
+
+---
+
 ## 🚀 Quick Start
 
 Get SoroScan running locally in under 5 minutes with Docker Compose.
