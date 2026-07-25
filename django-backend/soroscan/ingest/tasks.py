@@ -39,6 +39,8 @@ from .cache_utils import (
     set_cached_decoded_payload,
     invalidate_decoded_payload_cache,
     get_cached_contract,
+    contract_name_cache_key,
+    CONTRACT_NAME_CACHE_TTL,
     _SENTINEL,
 )
 from .telemetry import inject_trace_headers, payload_compression_ratio, tracer
@@ -908,11 +910,16 @@ def dispatch_webhook(self, subscription_id: int, event_id: int) -> bool:
             )
 
         try:
+            timeout_value = int(webhook.timeout_seconds) if webhook.timeout_seconds else 10
+        except (TypeError, ValueError):
+            timeout_value = 10
+
+        try:
             response = requests.post(
                 webhook.target_url,
                 data=payload_bytes,
                 headers=headers,
-                timeout=webhook.timeout_seconds,
+                timeout=timeout_value,
             )
             status_code = response.status_code
             elapsed_s = time.monotonic() - _start
@@ -1011,6 +1018,20 @@ def dispatch_webhook(self, subscription_id: int, event_id: int) -> bool:
             else:
                 error_msg = f"HTTP {status_code}"
 
+            # Determine response body (truncated to 4 KB by model.save)
+            try:
+                _resp_body = response.text if hasattr(response, "text") else ""
+            except Exception:
+                _resp_body = ""
+            _delivery_status = (
+                "success"
+                if success
+                else (
+                    "dead_letter"
+                    if self.request.retries >= self.max_retries
+                    else "failed"
+                )
+            )
             _log_delivery_attempt(
                 webhook,
                 event,
@@ -1022,6 +1043,9 @@ def dispatch_webhook(self, subscription_id: int, event_id: int) -> bool:
                 acknowledged=acknowledged,
                 latency_ms=latency_ms,
                 within_sla=within_sla,
+                status=_delivery_status,
+                response_body=_resp_body,
+                duration_ms=latency_ms,
             )
             attempt_logged = True
 
@@ -1336,17 +1360,33 @@ def _log_delivery_attempt(
     acknowledged: bool = False,
     latency_ms: int | None = None,
     within_sla: bool = False,
+    status: str = "pending",
+    response_body: str = "",
+    duration_ms: int | None = None,
 ) -> None:
-    """Create a ``WebhookDeliveryLog`` record for one dispatch attempt."""
+    """Create a ``WebhookDeliveryLog`` record for one dispatch attempt.
+
+    The ``status`` field maps to WebhookDeliveryLog.STATUS_* constants:
+    - ``pending``:     created before the HTTP request (pre-create)
+    - ``success``:     2xx + acknowledged
+    - ``failed``:      non-2xx or unacknowledged
+    - ``dead_letter``: final failed attempt after max retries
+
+    ``response_body`` is truncated to ``RESPONSE_BODY_MAX_BYTES`` (4 KB)
+    by the model's ``save()`` method.
+    """
     from .models import WebhookDeliveryLog
 
     WebhookDeliveryLog.objects.create(
         subscription=webhook,
         event=event,
         attempt_number=attempt_number,
+        status=status,
         status_code=status_code,
         success=success,
         error=error,
+        response_body=response_body,
+        duration_ms=duration_ms,
         payload_bytes=payload_bytes,
         acknowledged=acknowledged,
         latency_ms=latency_ms,
@@ -1608,25 +1648,74 @@ def _on_delivery_failure(
             )
 
 
-@shared_task
+@shared_task(name="soroscan.ingest.tasks.cleanup_webhook_delivery_logs")
 def cleanup_webhook_delivery_logs() -> int:
     """
-    Prune ``WebhookDeliveryLog`` entries older than 30 days (TTL cleanup).
+    Prune ``WebhookDeliveryLog`` entries older than ``WEBHOOK_DELIVERY_RETENTION_DAYS`` days.
+
+    The retention period defaults to 30 days and is configurable via the
+    ``WEBHOOK_DELIVERY_RETENTION_DAYS`` environment variable (Issue #765).
     """
     from .models import WebhookDeliveryLog
 
     _start = time.monotonic()
-    cutoff = timezone.now() - timedelta(days=30)
+    retention_days = int(getattr(settings, "WEBHOOK_DELIVERY_RETENTION_DAYS", 30))
+    cutoff = timezone.now() - timedelta(days=retention_days)
     deleted_count, _ = WebhookDeliveryLog.objects.filter(timestamp__lt=cutoff).delete()
     logger.info(
-        "Pruned %d WebhookDeliveryLog entries older than 30 days",
+        "Pruned %d WebhookDeliveryLog entries older than %d days",
         deleted_count,
-        extra={},
+        retention_days,
+        extra={"retention_days": retention_days, "deleted_count": deleted_count},
     )
     _get_metrics().task_duration_seconds.labels(
         task_name="cleanup_webhook_delivery_logs"
     ).observe(time.monotonic() - _start)
     return deleted_count
+
+
+@shared_task(name="soroscan.ingest.tasks.warm_contract_name_cache")
+def warm_contract_name_cache() -> int:
+    """
+    Pre-populate the contract_address -> contract_name cache in Redis.
+
+    Loads all TrackedContract records and writes a lightweight name-only
+    entry for each one under the key ``soroscan:contract:name:{contract_id}``
+    with a 24-hour TTL (``CONTRACT_NAME_CACHE_TTL``).
+
+    The task is idempotent — running it multiple times is safe; each
+    invocation simply refreshes the TTL.
+
+    Returns the number of cache entries written.
+    """
+    _start = time.monotonic()
+    contracts = list(
+        TrackedContract.objects.values("contract_id", "name")
+    )
+    total = len(contracts)
+    logger.info(
+        "warm_contract_name_cache: warming %d contract name entries (TTL=%ds)",
+        total,
+        CONTRACT_NAME_CACHE_TTL,
+        extra={"contract_count": total, "ttl_seconds": CONTRACT_NAME_CACHE_TTL},
+    )
+    for entry in contracts:
+        cache.set(
+            contract_name_cache_key(entry["contract_id"]),
+            entry["name"],
+            timeout=CONTRACT_NAME_CACHE_TTL,
+        )
+    elapsed = time.monotonic() - _start
+    logger.info(
+        "warm_contract_name_cache: completed — %d entries warmed in %.3fs",
+        total,
+        elapsed,
+        extra={
+            "contract_count": total,
+            "elapsed_seconds": round(elapsed, 3),
+        },
+    )
+    return total
 
 
 @shared_task

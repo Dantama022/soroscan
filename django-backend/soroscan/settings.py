@@ -387,6 +387,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "ingest.tasks.auto_resume_paused_contracts",
         "schedule": 300,  # every 5 minutes
     },
+    # Issue #778 — warm contract name lookup cache daily
+    "warm-contract-name-cache": {
+        "task": "soroscan.ingest.tasks.warm_contract_name_cache",
+        "schedule": 86400,  # daily
+    },
 }
 
 # Data Retention Configuration
@@ -394,6 +399,8 @@ CELERY_BEAT_SCHEDULE = {
 DEDUP_LOG_RETENTION_DAYS = env("DEDUP_LOG_RETENTION_DAYS", default=90, cast=int)
 # Number of days to retain contract events before pruning
 EVENT_RETENTION_DAYS = env("EVENT_RETENTION_DAYS", default=30, cast=int)
+# Issue #765 — number of days to retain webhook delivery logs
+WEBHOOK_DELIVERY_RETENTION_DAYS = env.int("WEBHOOK_DELIVERY_RETENTION_DAYS", default=30)
 
 # Alert deduplication window
 ALERT_DEDUP_WINDOW_SECONDS = env.int("ALERT_DEDUP_WINDOW_SECONDS", default=300)

@@ -23,6 +23,7 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework.pagination import PageNumberPagination
 
 import requests as http_requests
 
@@ -67,11 +68,17 @@ from .serializers import (
     TeamMemberAddSerializer,
     TeamSerializer,
     TrackedContractSerializer,
+    WebhookDeliveryLogSerializer,
     WebhookSubscriptionSerializer,
 )
 from .stellar_client import SorobanClient
 
 logger = logging.getLogger(__name__)
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 1000
 
 
 class AdminActionSerializer(serializers.ModelSerializer):
@@ -111,6 +118,7 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
 
     queryset = TrackedContract.objects.all()
     serializer_class = TrackedContractSerializer
+    permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ["is_active"]
     search_fields = ["name", "alias", "contract_id"]
@@ -399,6 +407,7 @@ class ContractEventViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = ContractEvent.objects.all()
     serializer_class = ContractEventSerializer
+    pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = [
         "contract__contract_id",
@@ -766,6 +775,60 @@ class WebhookSubscriptionViewSet(viewsets.ModelViewSet):
 
         matched = evaluate_condition(webhook.filter_condition, sample_event)
         return Response({"matched": bool(matched)})
+
+    @extend_schema(
+        responses={200: WebhookDeliveryLogSerializer(many=True)},
+        parameters=[
+            inline_serializer(
+                name="DeliveriesFilterParams",
+                fields={
+                    "status": serializers.CharField(required=False),
+                    "since": serializers.DateTimeField(required=False),
+                    "until": serializers.DateTimeField(required=False),
+                },
+            )
+        ],
+    )
+    @action(detail=True, methods=["get"])
+    def deliveries(self, request, pk=None):
+        """
+        Return paginated delivery log history for a webhook subscription.
+
+        Query params:
+        - ``status``  — filter by delivery status (pending/success/failed/dead_letter)
+        - ``since``   — ISO datetime lower bound for ``timestamp``
+        - ``until``   — ISO datetime upper bound for ``timestamp``
+
+        Issue #765.
+        """
+        from .models import WebhookDeliveryLog
+
+        webhook = self.get_object()
+        qs = (
+            WebhookDeliveryLog.objects.filter(subscription=webhook)
+            .select_related("event")
+            .order_by("-timestamp")
+        )
+
+        delivery_status = request.query_params.get("status")
+        if delivery_status:
+            qs = qs.filter(status=delivery_status)
+
+        since = request.query_params.get("since")
+        if since:
+            qs = qs.filter(timestamp__gte=since)
+
+        until = request.query_params.get("until")
+        if until:
+            qs = qs.filter(timestamp__lte=until)
+
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = WebhookDeliveryLogSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = WebhookDeliveryLogSerializer(qs, many=True)
+        return Response(serializer.data)
 
 
 class TeamViewSet(viewsets.ModelViewSet):

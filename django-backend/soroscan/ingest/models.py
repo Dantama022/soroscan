@@ -903,9 +903,25 @@ class WebhookDeliveryLog(models.Model):
     """
     Immutable audit log for every webhook dispatch attempt.
 
-    Records are subject to a 30-day TTL: the ``cleanup_webhook_delivery_logs``
-    Celery task (scheduled via Celery Beat) prunes entries older than 30 days.
+    Records are subject to a configurable TTL (default 30 days):
+    the ``cleanup_webhook_delivery_logs`` Celery task (scheduled via
+    Celery Beat) prunes entries older than ``WEBHOOK_DELIVERY_RETENTION_DAYS``.
     """
+
+    # Delivery status choices (Issue #765)
+    STATUS_PENDING = "pending"
+    STATUS_SUCCESS = "success"
+    STATUS_FAILED = "failed"
+    STATUS_DEAD_LETTER = "dead_letter"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_SUCCESS, "Success"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_DEAD_LETTER, "Dead Letter"),
+    ]
+
+    # Maximum bytes stored in response_body (Issue #765)
+    RESPONSE_BODY_MAX_BYTES = 4096
 
     subscription = models.ForeignKey(
         WebhookSubscription,
@@ -925,10 +941,27 @@ class WebhookDeliveryLog(models.Model):
         default=1,
         help_text="1-based attempt counter (1 = first try, 2 = first retry, …)",
     )
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+        help_text="Delivery status: pending → success | failed → dead_letter",
+    )
     status_code = models.IntegerField(
         null=True,
         blank=True,
         help_text="HTTP status code returned by the subscriber, or null for network errors",
+    )
+    response_body = models.TextField(
+        blank=True,
+        default="",
+        help_text="First 4 KB of the subscriber response body (truncated if longer)",
+    )
+    duration_ms = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Total round-trip duration in milliseconds",
     )
     success = models.BooleanField(
         default=False,
@@ -969,7 +1002,18 @@ class WebhookDeliveryLog(models.Model):
         ordering = ["-timestamp"]
         indexes = [
             models.Index(fields=["subscription", "timestamp"]),
+            models.Index(fields=["subscription", "status"]),
         ]
+
+    def save(self, *args, **kwargs):
+        # Enforce 4 KB cap on response_body
+        if self.response_body:
+            encoded = self.response_body.encode("utf-8", errors="replace")
+            if len(encoded) > self.RESPONSE_BODY_MAX_BYTES:
+                self.response_body = encoded[: self.RESPONSE_BODY_MAX_BYTES].decode(
+                    "utf-8", errors="replace"
+                )
+        super().save(*args, **kwargs)
 
     def __str__(self):
         status_label = "OK" if self.success else f"FAIL({self.status_code})"

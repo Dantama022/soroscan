@@ -3,6 +3,7 @@ Stellar/Soroban client for interacting with the SoroScan contract.
 """
 import logging
 import time
+import requests  # noqa: F401
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Optional

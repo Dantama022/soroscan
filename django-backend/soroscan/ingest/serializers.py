@@ -453,7 +453,41 @@ class WebhookSubscriptionSerializer(serializers.ModelSerializer):
         return value
 
 
+class WebhookDeliveryLogSerializer(serializers.ModelSerializer):
+    """
+    Read-only serializer for WebhookDeliveryLog entries.
+
+    Exposed via ``GET /api/webhooks/{id}/deliveries/`` (Issue #765).
+    """
+
+    subscription_id = serializers.IntegerField(source="subscription.id", read_only=True)
+    event_id = serializers.IntegerField(source="event.id", read_only=True, allow_null=True)
+
+    class Meta:
+        from .models import WebhookDeliveryLog
+        model = WebhookDeliveryLog
+        fields = [
+            "id",
+            "subscription_id",
+            "event_id",
+            "attempt_number",
+            "status",
+            "status_code",
+            "success",
+            "acknowledged",
+            "within_sla",
+            "latency_ms",
+            "duration_ms",
+            "payload_bytes",
+            "error",
+            "response_body",
+            "timestamp",
+        ]
+        read_only_fields = fields
+
+
 class RecordEventRequestSerializer(serializers.Serializer):
+
     """
     Serializer for incoming event recording requests.
     Used to submit a transaction to the SoroScan contract for indexing.
