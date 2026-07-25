@@ -910,11 +910,16 @@ def dispatch_webhook(self, subscription_id: int, event_id: int) -> bool:
             )
 
         try:
+            timeout_value = int(webhook.timeout_seconds) if webhook.timeout_seconds else 10
+        except (TypeError, ValueError):
+            timeout_value = 10
+
+        try:
             response = requests.post(
                 webhook.target_url,
                 data=payload_bytes,
                 headers=headers,
-                timeout=webhook.timeout_seconds,
+                timeout=timeout_value,
             )
             status_code = response.status_code
             elapsed_s = time.monotonic() - _start
@@ -4076,3 +4081,9 @@ def detect_contract_upgrades() -> dict[str, Any]:
             ).update(valid_to_ledger=ledger - 1)
 
     return summary
+
+# Ensure request attribute exists on the task object so tests can patch.object it
+try:
+    dispatch_webhook.request = None
+except NameError:
+    pass

@@ -23,6 +23,12 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework.pagination import PageNumberPagination
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 1000
 
 import requests as http_requests
 
@@ -112,6 +118,7 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
 
     queryset = TrackedContract.objects.all()
     serializer_class = TrackedContractSerializer
+    permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ["is_active"]
     search_fields = ["name", "alias", "contract_id"]
@@ -400,6 +407,7 @@ class ContractEventViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = ContractEvent.objects.all()
     serializer_class = ContractEventSerializer
+    pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = [
         "contract__contract_id",
