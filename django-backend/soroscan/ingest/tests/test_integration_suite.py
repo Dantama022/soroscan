@@ -25,7 +25,6 @@ from rest_framework.test import APIClient
 
 from soroscan.ingest.cache_utils import CONTRACT_NAME_CACHE_TTL, contract_name_cache_key
 from soroscan.ingest.models import (
-    ContractEvent,
     TrackedContract,
     WebhookDeadLetter,
     WebhookDeliveryLog,

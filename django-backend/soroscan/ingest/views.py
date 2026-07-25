@@ -25,11 +25,6 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.pagination import PageNumberPagination
 
-class StandardResultsSetPagination(PageNumberPagination):
-    page_size = 50
-    page_size_query_param = "page_size"
-    max_page_size = 1000
-
 import requests as http_requests
 
 from soroscan.throttles import IngestRateThrottle
@@ -79,6 +74,11 @@ from .serializers import (
 from .stellar_client import SorobanClient
 
 logger = logging.getLogger(__name__)
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 1000
 
 
 class AdminActionSerializer(serializers.ModelSerializer):
