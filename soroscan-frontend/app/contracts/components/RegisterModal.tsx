@@ -107,13 +107,13 @@ export function RegisterModal({ isOpen, onClose, onSubmit }: RegisterModalProps)
           <div className="flex justify-end">
             <span
               className={`text-xs font-terminal-mono ${
-                formData.description.length >= DESCRIPTION_WARNING_THRESHOLD
+                (formData.description?.length ?? 0) >= DESCRIPTION_WARNING_THRESHOLD
                   ? "text-terminal-danger"
                   : "text-terminal-gray"
               }`}
               aria-live="polite"
             >
-              {formData.description.length}/{DESCRIPTION_MAX_LENGTH}
+              {formData.description?.length ?? 0}/{DESCRIPTION_MAX_LENGTH}
             </span>
           </div>
         </div>

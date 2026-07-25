@@ -129,6 +129,7 @@ export function CreateWebhookModal({ isOpen, onClose, onCreate }: CreateWebhookM
         eventTypes: selectedTypes.length === 0 ? ["ALL"] : selectedTypes,
         contractFilter: contractFilter.trim() || undefined,
         status,
+        isActive: status === "ACTIVE",
         timeoutSeconds: timeoutValue,
         filterExpression: filterExpressionStr || undefined,
         customHeaders: Object.keys(headerRecord).length > 0 ? headerRecord : undefined,

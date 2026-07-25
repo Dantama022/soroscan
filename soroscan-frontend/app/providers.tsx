@@ -14,12 +14,9 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <ApolloProvider>
-      <ToastProvider>
-        <KeyboardShortcutsOverlay />
-        {children}
-      </ToastProvider>
       <OnboardingProvider>
         <ToastProvider>
+          <KeyboardShortcutsOverlay />
           {children}
           <OnboardingTour />
         </ToastProvider>

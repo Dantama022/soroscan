@@ -42,7 +42,7 @@ const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
   ({ className, variant = "info", title, description, dismissible = false, onDismiss, copyable = true, actions, ...props }, ref) => {
     const [isVisible, setIsVisible] = React.useState(true)
     const [copied, setCopied] = React.useState(false)
-    const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | undefined>()
+    const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
     const Icon = variantIcons[variant || "info"]
 
     const handleDismiss = () => {
