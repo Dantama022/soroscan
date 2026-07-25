@@ -64,7 +64,7 @@ class TestTrackedContractViewSet:
         url = reverse("contract-list")
         response = api_client.get(url)
 
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_create_contract(self, authenticated_client):
         url = reverse("contract-list")

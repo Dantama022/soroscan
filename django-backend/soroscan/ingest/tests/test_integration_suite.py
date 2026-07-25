@@ -107,7 +107,7 @@ class TestTrackedContractREST:
     def test_list_requires_auth(self, api_client):
         url = reverse("contract-list")
         r = api_client.get(url)
-        assert r.status_code == status.HTTP_403_FORBIDDEN
+        assert r.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_list_returns_own_contracts(self, auth_client, contract):
         url = reverse("contract-list")
