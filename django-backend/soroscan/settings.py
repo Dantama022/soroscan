@@ -329,6 +329,9 @@ CELERY_TIMEZONE = TIME_ZONE
 # Graceful shutdown: wait up to 30s for active tasks after SIGTERM
 CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = 30
 SHUTDOWN_TIMEOUT_SECONDS = env.int("SHUTDOWN_TIMEOUT_SECONDS", default=30)
+# Task timeout limits — hard limit kills the task, soft limit raises SoftTimeLimitExceeded
+CELERY_TASK_TIME_LIMIT = env.int("CELERY_TASK_TIME_LIMIT", default=600)
+CELERY_TASK_SOFT_TIME_LIMIT = env.int("CELERY_TASK_SOFT_TIME_LIMIT", default=540)
 CELERY_TASK_ROUTES = {
     "ingest.tasks.ingest_latest_events": {"queue": "high_priority"},
     "ingest.tasks.dispatch_webhook": {"queue": "default"},

@@ -127,12 +127,14 @@ def _log_timeout_warning(task_name: str, remaining: float) -> None:
 
 @task_prerun.connect
 def _start_timeout_monitor(task_id: str, task, **kwargs) -> None:
-    # Check request first, then task class for timeouts
+    # Check request first, then task class, then global settings for timeouts
     timeout = (
         getattr(task.request, "soft_time_limit", None)
         or getattr(task.request, "time_limit", None)
         or getattr(task, "soft_time_limit", None)
         or getattr(task, "time_limit", None)
+        or getattr(settings, "CELERY_TASK_SOFT_TIME_LIMIT", None)
+        or getattr(settings, "CELERY_TASK_TIME_LIMIT", None)
     )
 
     if timeout:
@@ -794,6 +796,7 @@ def validate_event_payload(
     name="ingest.tasks.dispatch_webhook",
     bind=True,
     max_retries=5,
+    soft_time_limit=30,
 )
 def dispatch_webhook(self, subscription_id: int, event_id: int) -> bool:
     """
@@ -2159,7 +2162,7 @@ def alert_downstream_contract_change(contract_id: str, change_type: str = "modif
     return notified
 
 
-@shared_task(name="ingest.tasks.ingest_latest_events")
+@shared_task(name="ingest.tasks.ingest_latest_events", soft_time_limit=120)
 def ingest_latest_events() -> int:
     """
     Sync events from Horizon/Soroban RPC.
@@ -2435,7 +2438,7 @@ def ingest_latest_events() -> int:
     return new_events
 
 
-@shared_task(name="ingest.tasks.aggregate_event_statistics")
+@shared_task(name="ingest.tasks.aggregate_event_statistics", soft_time_limit=180)
 def aggregate_event_statistics() -> dict[str, Any]:
     """
     Hourly task: aggregate ContractEvent rows from the last hour into
@@ -2779,7 +2782,7 @@ def snapshot_contract_state() -> dict[str, int]:
     return {"captured": captured, "skipped": skipped, "interval": interval}
 
 
-@shared_task(bind=True, queue="backfill", max_retries=3, default_retry_delay=60)
+@shared_task(bind=True, queue="backfill", max_retries=3, default_retry_delay=60, soft_time_limit=300)
 def backfill_contract_events(
     self,
     contract_id: str,
@@ -2908,7 +2911,7 @@ def backfill_contract_events(
         )
 
 
-@shared_task(bind=True, queue="backfill")
+@shared_task(bind=True, queue="backfill", soft_time_limit=300)
 def reprocess_events(
     self,
     contract_id: str,
