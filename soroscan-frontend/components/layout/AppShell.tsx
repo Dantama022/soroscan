@@ -9,15 +9,18 @@ import {
   Webhook,
   Settings,
   Shield,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/ui/drawer";
 import { HamburgerToggle } from "@/components/ui/hamburger-toggle";
+import { OrganizationSwitcher } from "@/components/organization/OrganizationSwitcher";
 
 const navItems = [
   { href: "/dashboard", label: "Events", icon: LayoutDashboard },
   { href: "/contracts", label: "Contracts", icon: FileCode2 },
   { href: "/webhooks", label: "Webhooks", icon: Webhook },
+  { href: "/organization", label: "Org", icon: Building2 },
   { href: "/admin", label: "Admin", icon: Shield },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
@@ -111,25 +114,28 @@ export function AppShell({ children }: AppShellProps) {
           ◆ SoroScan
         </Link>
 
-        <div className="ml-auto hidden sm:flex items-center gap-1">
-          {navItems.map((item) => {
-            const isActive =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "min-h-[44px] min-w-[44px] inline-flex items-center justify-center px-3 text-xs uppercase tracking-wider transition-colors",
-                  isActive
-                    ? "text-terminal-green border-b-2 border-terminal-green"
-                    : "text-terminal-gray hover:text-terminal-green",
-                )}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+        <div className="ml-auto flex items-center gap-2">
+          <OrganizationSwitcher className="hidden sm:block" />
+          <div className="hidden sm:flex items-center gap-1">
+            {navItems.map((item) => {
+              const isActive =
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "min-h-[44px] min-w-[44px] inline-flex items-center justify-center px-3 text-xs uppercase tracking-wider transition-colors",
+                    isActive
+                      ? "text-terminal-green border-b-2 border-terminal-green"
+                      : "text-terminal-gray hover:text-terminal-green",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </header>
 
