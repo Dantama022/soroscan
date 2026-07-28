@@ -87,7 +87,7 @@ export default function ContractsPage() {
       // Simulate backfill task
       await new Promise((resolve) => setTimeout(resolve, 1500));
       alert(`Backfill started for contract ${contractId}. Task ID: task_${Date.now()}`);
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to start backfill");
     } finally {
       setBackfillInProgress(null);
