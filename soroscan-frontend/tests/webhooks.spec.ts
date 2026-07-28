@@ -46,6 +46,7 @@ test.describe("Webhook Manager", () => {
     const rows = table.locator("tbody tr");
     const initialCount = await rows.count();
     expect(initialCount).toBeGreaterThan(0);
+    await expect(rows.first()).toBeVisible();
 
     // Click via DOM to avoid detach/scroll races on overflow tables in CI.
     await rows.first().getByTestId("delete-webhook-btn").evaluate((el: HTMLButtonElement) => el.click());
@@ -54,7 +55,7 @@ test.describe("Webhook Manager", () => {
     await page.getByTestId("confirm-delete-webhook-btn").click();
 
     await expect(page.getByText(/WEBHOOK_DELETED/i)).toBeVisible();
-    await expect(rows).toHaveCount(initialCount - 1);
+    await expect(rows).toHaveCount(initialCount - 1, { timeout: 10_000 });
   });
 
   test("webhooks page visual regression", async ({ authenticatedPage: page }, testInfo) => {

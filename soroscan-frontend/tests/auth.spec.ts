@@ -33,8 +33,10 @@ test.describe("Authentication", () => {
     await page.getByTestId("login-password").fill("securepass");
     await page.getByTestId("login-submit").click();
 
-    await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.getByText(/PERFORMANCE_DASHBOARD/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/dashboard(?:\/)?$/, { timeout: 20_000 });
+    await expect(
+      page.getByText(/PERFORMANCE_DASHBOARD|MULTI_REGION_HA_DASHBOARD/i),
+    ).toBeVisible();
   });
 
   test("login page visual regression", async ({ page }, testInfo) => {

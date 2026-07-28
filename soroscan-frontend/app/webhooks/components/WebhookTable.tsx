@@ -168,16 +168,22 @@ function WebhookCard({
               </Button>
             </Link>
             <button
+              type="button"
               onClick={() => onTest(wh.id)}
               disabled={isTesting}
               title="Test webhook"
+              aria-label={`Test webhook ${wh.id}`}
+              data-testid={`test-webhook-${wh.id}`}
               className="min-w-[44px] min-h-[44px] flex items-center justify-center border border-terminal-cyan/40 text-terminal-cyan hover:border-terminal-cyan hover:bg-terminal-cyan/10 transition-colors disabled:opacity-50"
             >
               <FlaskConical size={14} />
             </button>
             <button
+              type="button"
               onClick={() => onDelete(wh.id)}
               title="Delete webhook"
+              aria-label={`Delete webhook ${wh.id}`}
+              data-testid={`delete-webhook-${wh.id}`}
               className="min-w-[44px] min-h-[44px] flex items-center justify-center border border-terminal-danger/40 text-terminal-danger hover:border-terminal-danger hover:bg-terminal-danger/10 transition-colors"
             >
               <Trash2 size={14} />
@@ -358,17 +364,21 @@ export function WebhookTable({ webhooks, onDelete, onTest, testingId, testResult
                         </Button>
                       </Link>
                       <button
+                        type="button"
                         onClick={() => onTest(wh.id)}
                         disabled={isTesting}
                         title="Test webhook"
+                        aria-label={`Test webhook ${wh.id}`}
                         data-testid="test-webhook-btn"
                         className="h-7 w-7 flex items-center justify-center border border-terminal-cyan/40 text-terminal-cyan hover:border-terminal-cyan hover:bg-terminal-cyan/10 transition-colors disabled:opacity-50"
                       >
                         <FlaskConical size={12} />
                       </button>
                       <button
+                        type="button"
                         onClick={() => onDelete(wh.id)}
                         title="Delete webhook"
+                        aria-label={`Delete webhook ${wh.id}`}
                         data-testid="delete-webhook-btn"
                         className="h-7 w-7 flex items-center justify-center border border-terminal-danger/40 text-terminal-danger hover:border-terminal-danger hover:bg-terminal-danger/10 transition-colors"
                       >

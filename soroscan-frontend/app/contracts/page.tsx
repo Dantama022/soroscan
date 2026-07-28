@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Card } from "@/components/terminal/Card";
 import { Button } from "@/components/terminal/Button";
 import { ContractTable } from "./components/ContractTable";
@@ -109,6 +110,11 @@ export default function ContractsPage() {
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Link href="/contract-upgrades" className="w-full sm:w-auto">
+              <Button variant="secondary" className="w-full sm:w-auto">
+                Upgrade Timeline
+              </Button>
+            </Link>
             <Button
               variant={showFavoritesOnly ? "primary" : "secondary"}
               onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
