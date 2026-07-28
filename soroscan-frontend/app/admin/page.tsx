@@ -55,15 +55,14 @@ export default function AdminDashboard() {
     return () => clearInterval(interval)
   }, [loadData])
 
-  // Mock data for the chart (last 24h)
+  // Mock data for the chart (last 24h) — deterministic for stable visuals/tests
   const chartData = React.useMemo(() => {
     if (!data) return Array(24).fill(0).map((_, i) => ({ label: `${i}:00`, value: 0 }))
-    
-    // In a real app, this would come from the backend. 
-    // Mocking a trend based on total events for visualization.
+
+    const seed = data.systemMetrics?.eventsIndexedTotal ?? 0
     return Array(24).fill(0).map((_, i) => ({
       label: `${(i + 1)}h ago`,
-      value: Math.floor(Math.random() * 500) + 100
+      value: 100 + ((seed + i * 37) % 500)
     })).reverse()
   }, [data])
 
@@ -125,7 +124,10 @@ export default function AdminDashboard() {
         </div>
 
         {/* Top Metrics Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+          data-testid="admin-metrics"
+        >
           <MetricsCard 
             title="Events Today" 
             value={metrics?.eventsIndexedToday ?? 0} 

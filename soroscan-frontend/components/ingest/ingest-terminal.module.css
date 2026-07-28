@@ -369,6 +369,8 @@
 
 .exportModal {
   width: min(760px, calc(100vw - 1rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
   border: 1px solid #123148;
   background: linear-gradient(180deg, rgba(12, 21, 35, 0.98), rgba(6, 11, 18, 0.98));
   box-shadow: 0 0 0 1px rgba(0, 255, 156, 0.08), 0 16px 38px rgba(0, 0, 0, 0.5);

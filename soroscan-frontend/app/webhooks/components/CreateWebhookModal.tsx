@@ -160,6 +160,7 @@ export function CreateWebhookModal({ isOpen, onClose, onCreate }: CreateWebhookM
           <div>
             <Input
               id="webhook-url-input"
+              data-testid="webhook-url-input"
               label="ENDPOINT_URL *"
               type="url"
               placeholder="https://yourapp.io/webhook"
@@ -368,6 +369,7 @@ export function CreateWebhookModal({ isOpen, onClose, onCreate }: CreateWebhookM
             <Button
               type="submit"
               variant="primary"
+              data-testid="create-webhook-submit"
               disabled={submitting || (urlTouched && !urlValid)}
               className="flex-1"
             >

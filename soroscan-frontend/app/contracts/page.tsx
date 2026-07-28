@@ -34,12 +34,12 @@ export default function ContractsPage() {
       setIsLoading(true);
       setError(null);
       const data = await listContracts();
-      // Enhance contracts with mock metrics for MVP
-      const enhanced = data.map((c: Contract, idx: number) => ({
+      // Prefer API fields when present so UI stays deterministic for tests/visuals.
+      const enhanced = data.map((c: Contract) => ({
         ...c,
-        eventCount: Math.floor(Math.random() * 1000) + 100,
-        lastEventTime: new Date(Date.now() - Math.random() * 86400000).toISOString(),
-        status: idx % 3 !== 0 ? "active" : "inactive",
+        eventCount: c.eventCount ?? 0,
+        lastEventTime: c.updatedAt,
+        status: c.status ?? "active",
       }));
       setContracts(enhanced);
     } catch (err) {
@@ -118,6 +118,8 @@ export default function ContractsPage() {
             </Button>
             <Button
               variant="primary"
+              data-testid="register-contract-btn"
+              data-tour="register-contract"
               onClick={() => setIsRegisterModalOpen(true)}
               className="w-full sm:w-auto"
             >

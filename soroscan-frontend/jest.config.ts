@@ -13,6 +13,8 @@ const config: Config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },
+  // Playwright E2E specs live in tests/ and must not run under Jest
+  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/tests/', '/test-results/', '/playwright-report/'],
 
   // Coverage collection - combined exclusions
   collectCoverageFrom: [

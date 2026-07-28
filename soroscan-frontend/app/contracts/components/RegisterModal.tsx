@@ -73,6 +73,7 @@ export function RegisterModal({ isOpen, onClose, onSubmit }: RegisterModalProps)
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           label="Contract ID"
+          data-testid="contract-id-input"
           value={formData.contractId}
           onChange={(e) => setFormData({ ...formData, contractId: e.target.value })}
           placeholder="CA..."
@@ -81,6 +82,7 @@ export function RegisterModal({ isOpen, onClose, onSubmit }: RegisterModalProps)
 
         <Input
           label="Name"
+          data-testid="contract-name-input"
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder="My Contract"
@@ -96,6 +98,7 @@ export function RegisterModal({ isOpen, onClose, onSubmit }: RegisterModalProps)
               &gt;
             </span>
             <textarea
+              data-testid="contract-description-input"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Optional description..."
@@ -166,7 +169,13 @@ export function RegisterModal({ isOpen, onClose, onSubmit }: RegisterModalProps)
         )}
 
         <div className="flex gap-3 pt-4">
-          <Button type="submit" variant="primary" disabled={isSubmitting} className="flex-1">
+          <Button
+            type="submit"
+            variant="primary"
+            data-testid="register-submit-btn"
+            disabled={isSubmitting}
+            className="flex-1"
+          >
             {isSubmitting ? "REGISTERING..." : "REGISTER"}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>

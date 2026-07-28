@@ -6,6 +6,9 @@
     "soroscan-docs",
     "soroscan-frontend"
   ],
+  "scripts": {
+    "test:e2e": "pnpm --dir soroscan-frontend run test:e2e"
+  },
   "dependencies": {
     "recharts": "^3.8.1"
   }
