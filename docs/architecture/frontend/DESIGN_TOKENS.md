@@ -64,3 +64,4 @@ Refined box-shadows use a dual-layer glow (outer bloom + inner core) for green, 
 - CSS variables: `app/globals.css` (`@theme inline` + `:root`)
 - Tailwind theme hooks: `--color-terminal-*`, `--spacing-terminal-*`, `--animate-terminal-*`
 - TypeScript: `lib/design-tokens.ts`
+- Layout / IA tokens (#910): `layout` export — see [DASHBOARD_LAYOUT_IA.md](./DASHBOARD_LAYOUT_IA.md)

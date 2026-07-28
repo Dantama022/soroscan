@@ -16,6 +16,8 @@ import { parseSearchQuery, matchesFilters } from "@/lib/search-parser";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { useContractEventSubscription } from "@/src/hooks/useContractEventSubscription";
 import { SubscriptionStatusBadge } from "@/components/ui/SubscriptionStatusBadge";
+import { DashboardWorkspace } from "@/components/layout/DashboardWorkspace";
+import { DashboardPanel } from "@/components/layout/DashboardPanel";
 
 const PAGE_SIZE_STORAGE_KEY = "soroscan:page-size";
 const DEFAULT_PAGE_SIZE = 25;
@@ -413,35 +415,48 @@ export function EventExplorerDashboard() {
 
   return (
     <div className={styles.page}>
-      <main className={`${styles.timelineApp} ${styles.explorerApp}`}>
-        <header className={styles.hero}>
-          <p className={styles.kicker}>SoroScan</p>
-          <h1 className={styles.title}>Event Explorer Dashboard</h1>
-          <p className={styles.contractId}>
-            Browse, filter, and analyze contract events in real-time
-          </p>
-          <div className="absolute top-4 right-4">
-            <NotificationBell />
-          </div>
-        </header>
-
-        <FilterBar
-          contracts={contracts}
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          onExport={handleExport}
-          tagSuggestions={tagSuggestions}
-        />
-
-        <AdvancedSearch 
+      <DashboardWorkspace
+        aria-label="Event Explorer"
+        header={
+          <>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-terminal-cyan m-0 mb-1">
+                SoroScan
+              </p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-terminal-green m-0">
+                Event Explorer
+              </h1>
+              <p className="text-xs text-terminal-gray mt-1 m-0">
+                Browse, filter, and analyze contract events in real-time
+              </p>
+            </div>
+            <div className="flex items-center gap-3 self-start sm:self-auto">
+              <NotificationBell />
+            </div>
+          </>
+        }
+        sidebar={
+          <FilterBar
+            contracts={contracts}
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            onExport={handleExport}
+            tagSuggestions={tagSuggestions}
+            variant="sidebar"
+          />
+        }
+      >
+        <AdvancedSearch
           onSearch={(q) => handleFilterChange({ searchQuery: q })}
           initialQuery={filters.searchQuery}
         />
 
-        <section className={styles.timelinePanel} aria-label="Events table">
-          <div className={styles.panelHead}>
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-              <h2 className={styles.sectionTitle}>Contract Events</h2>
+        <DashboardPanel
+          elevation="default"
+          title="Contract Events"
+          aria-label="Events table"
+          actions={
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <SubscriptionStatusBadge connectionState={connectionState} />
               {newEventsCount > 0 && (
                 <button
@@ -456,9 +471,7 @@ export function EventExplorerDashboard() {
                   {newEventsCount} new event{newEventsCount !== 1 ? "s" : ""}
                 </button>
               )}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-              <p className={styles.summary}>
+              <p className={`${styles.summary} m-0 hidden sm:block`}>
                 {loading
                   ? "Loading..."
                   : `Showing ${startIndex}-${endIndex} of ${totalCount}+`}
@@ -467,7 +480,7 @@ export function EventExplorerDashboard() {
                 type="button"
                 className={styles.btn}
                 onClick={() => {
-                  setIsPaused(prev => !prev);
+                  setIsPaused((prev) => !prev);
                   if (isPaused) {
                     setNewEventsCount(0);
                   }
@@ -476,8 +489,8 @@ export function EventExplorerDashboard() {
                 {isPaused ? "▶ Resume" : "⏸ Pause"}
               </button>
             </div>
-          </div>
-
+          }
+        >
           {error && (
             <div className={`${styles.status} ${styles.error}`} aria-live="polite">
               {error}
@@ -511,8 +524,8 @@ export function EventExplorerDashboard() {
             pageSize={pageSize}
             onPageSizeChange={handlePageSizeChange}
           />
-        </section>
-      </main>
+        </DashboardPanel>
+      </DashboardWorkspace>
 
       {selectedEvent && (
         <EventDetailModal
@@ -521,7 +534,6 @@ export function EventExplorerDashboard() {
         />
       )}
 
-      {/* Floating bulk actions toolbar – visible when ≥1 events are selected */}
       <BulkActionsToolbar
         selectedIds={selectedIds}
         allEvents={filteredEvents}

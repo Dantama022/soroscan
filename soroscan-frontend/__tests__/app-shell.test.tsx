@@ -70,4 +70,19 @@ describe("AppShell mobile navigation", () => {
 
     expect(screen.getByTestId("page-content")).toBeInTheDocument();
   });
+
+  it("renders sidebar nav links with icon + label pattern", () => {
+    render(
+      <AppShell>
+        <div>Content</div>
+      </AppShell>,
+    );
+
+    const sidebar = document.getElementById("app-sidebar");
+    expect(sidebar).toBeTruthy();
+    expect(sidebar!.querySelector('a[href="/dashboard"]')).toHaveTextContent(
+      "Events",
+    );
+    expect(sidebar!.querySelector('a[href="/admin"]')).toHaveTextContent("Admin");
+  });
 });

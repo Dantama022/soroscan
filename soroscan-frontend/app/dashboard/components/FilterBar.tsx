@@ -19,6 +19,8 @@ interface FilterBarProps {
   onFilterChange: (filters: Partial<FilterBarProps["filters"]>) => void;
   onExport: () => void;
   tagSuggestions: string[];
+  /** `sidebar` = vertical filter column for dashboard IA (#910) */
+  variant?: "inline" | "sidebar";
 }
 
 function normalizeTag(tag: string): string {
@@ -219,6 +221,7 @@ export function FilterBar({
   onFilterChange,
   onExport,
   tagSuggestions,
+  variant = "inline",
 }: FilterBarProps) {
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [localFilters, setLocalFilters] = useState(filters);
@@ -347,12 +350,19 @@ export function FilterBar({
         <FilterForm {...formProps} />
       </Drawer>
 
-      {/* Desktop: inline filter panel */}
+      {/* Desktop: sidebar or inline filter panel */}
       <section
-        className={`${styles.controls} hidden sm:block`}
+        className={`${styles.controls} hidden sm:block ${
+          variant === "sidebar" ? styles.filterSidebar : ""
+        }`}
         aria-label="Event filters"
+        data-variant={variant}
       >
-        <div className={styles.controlCard}>
+        <div
+          className={`${styles.controlCard} ${
+            variant === "sidebar" ? styles.filterSidebarCard : ""
+          }`}
+        >
           <h2 className={styles.sectionTitle}>Filters</h2>
           <FilterForm {...formProps} />
         </div>

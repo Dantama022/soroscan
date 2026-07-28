@@ -74,3 +74,60 @@ export const semanticColors: Record<SemanticTone, string> = {
   error: colors.danger,
   info: colors.info,
 };
+
+/**
+ * Dashboard layout & information architecture tokens (#910).
+ * Desktop reference: 1920px. Mobile reference: 375px.
+ */
+export const layout = {
+  /** App chrome */
+  headerHeight: 60,
+  navSidebarWidth: 240,
+  /** Event Explorer filter column (desktop) */
+  filterSidebarWidth: 280,
+  /** Content gutters */
+  pagePaddingDesktop: 24,
+  pagePaddingMobile: 16,
+  /** Breakpoints matching Tailwind sm/md/lg */
+  breakpoints: {
+    mobileMax: 639,
+    tabletMin: 640,
+    desktopMin: 1024,
+    wideMin: 1280,
+  },
+  /** Card / panel hierarchy */
+  panel: {
+    borderWidth: 1,
+    radius: 2,
+    padding: 16,
+    gap: 16,
+    shadow: "0 0 20px rgba(0, 255, 65, 0.1)",
+    elevatedShadow:
+      "0 0 24px rgba(0, 255, 65, 0.16), 0 0 4px rgba(0, 255, 65, 0.2)",
+  },
+  /** Data table density */
+  table: {
+    headerHeight: 40,
+    rowHeight: 48,
+    rowHeightCompact: 40,
+    cellPaddingX: 12,
+    cellPaddingY: 10,
+    minWidth: 680,
+    columns: {
+      select: 44,
+      contract: 160,
+      type: 120,
+      ledger: 96,
+      time: 140,
+      tags: 160,
+      actions: 88,
+    },
+  },
+  /** Admin dashboard grid */
+  admin: {
+    metricsColumns: 4,
+    chartMainSpan: 2,
+    chartSideSpan: 1,
+    sectionGap: 24,
+  },
+} as const;

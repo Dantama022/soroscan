@@ -52,8 +52,8 @@ function NavLink({
         "flex items-center gap-3 min-h-[44px] px-4 py-2 text-sm font-terminal-mono transition-colors rounded-sm",
         "border-l-4",
         isActive
-          ? "border-terminal-green bg-terminal-green/10 text-terminal-green"
-          : "border-transparent text-terminal-gray hover:text-terminal-green hover:bg-terminal-green/5",
+          ? "border-terminal-green bg-terminal-green/10 text-terminal-green shadow-[0_0_12px_rgba(0,255,65,0.15)]"
+          : "border-transparent text-terminal-gray hover:text-terminal-green hover:bg-terminal-green/5 hover:border-terminal-green/40",
       )}
     >
       <Icon size={18} aria-hidden="true" />
