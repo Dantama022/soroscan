@@ -26,6 +26,7 @@ import type {
   RecordEventsBatchParams,
   RecordEventsBatchResponse,
 } from "./types.js";
+import { EventQueryBuilder, ContractQueryBuilder } from "./builder.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Error class
@@ -137,6 +138,38 @@ export class SoroScanClient {
     }
 
     return json as T;
+  }
+
+  // ─── Builder factories (SC-10) ────────────────────────────────────────────
+
+  /**
+   * Create a fluent event query builder (SC-10).
+   *
+   * @example
+   * const result = await client
+   *   .events()
+   *   .filterByContract("CCAAA...")
+   *   .filterByEventType("transfer")
+   *   .filterByLedgerRange(1_000, 2_000)
+   *   .execute();
+   */
+  events(): EventQueryBuilder {
+    return new EventQueryBuilder(this);
+  }
+
+  /**
+   * Create a fluent contract query builder (SC-10).
+   *
+   * @example
+   * const result = await client
+   *   .contracts()
+   *   .filterByType("token")
+   *   .filterByVerified(true)
+   *   .search("my-token")
+   *   .execute();
+   */
+  contracts(): ContractQueryBuilder {
+    return new ContractQueryBuilder(this);
   }
 
   // ─── Events ────────────────────────────────────────────────────────────────
