@@ -18,6 +18,14 @@ type Query {
   teamMembers(organizationId: String!): [TeamMember!]!
   teamInvitations(organizationId: String!): [TeamInvitation!]!
   organizationActivity(organizationId: String!): [OrgActivityEntry!]!
+
+  # Contract Dependency Graph (#922)
+  contracts(filter: ContractFilter): [ContractWithDeps!]!
+}
+
+input ContractFilter {
+  name: String
+  vulnerabilityType: String
 }
 
 type DataExportResponse {
@@ -174,4 +182,51 @@ input UpdateOrganizationInput {
   name: String
   billingContact: String
   dataRegion: DataRegion
+}
+
+# ── Contract Dependency Graph (#922) ──────────────────────────────────────────
+
+enum VulnerabilitySeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  NONE
+}
+
+enum DependencyType {
+  DIRECT
+  INDIRECT
+  CIRCULAR
+}
+
+type ContractVulnerability {
+  id: ID!
+  title: String!
+  severity: VulnerabilitySeverity!
+  impactedContracts: [String!]!
+}
+
+type ContractDependency {
+  id: ID!
+  contractAddress: String!
+  contractName: String!
+  dependencyType: DependencyType!
+}
+
+type ContractDependent {
+  id: ID!
+  contractAddress: String!
+  contractName: String!
+}
+
+type ContractWithDeps {
+  id: ID!
+  name: String!
+  address: String!
+  riskScore: Float!
+  reachabilityPct: Float!
+  vulnerabilities: [ContractVulnerability!]!
+  dependencies: [ContractDependency!]!
+  dependents: [ContractDependent!]!
 }

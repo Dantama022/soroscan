@@ -16,6 +16,12 @@ const nextConfig: NextConfig = {
   // always at a predictable path (matches Dockerfile.frontend, which builds
   // from an isolated context where this ambiguity doesn't arise).
   outputFileTracingRoot: process.cwd(),
+  // Turbopack: pin the root to this package directory so Next doesn't
+  // misdetect the monorepo root when the app/ directory is traversed
+  // (Next.js 16 looks for pnpm-lock.yaml and may walk up to the repo root).
+  turbopack: {
+    root: process.cwd(),
+  },
   images: {
     // No external image sources are in use yet (the app renders no raster
     // images outside the user-uploaded org logo crop tool, which reads
