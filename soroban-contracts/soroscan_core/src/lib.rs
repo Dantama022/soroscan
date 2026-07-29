@@ -8,6 +8,8 @@ use soroban_sdk::{
 const ADMIN_KEY: Symbol = symbol_short!("admin");
 const INDEXERS_KEY: Symbol = symbol_short!("idxrs");
 const COUNTER_KEY: Symbol = symbol_short!("count");
+const CONTRACT_STATS_KEY: Symbol = symbol_short!("cstats");
+const CONTRACT_EVENT_TYPES_KEY: Symbol = symbol_short!("etypes");
 
 /// Represents a recorded event from an indexed contract.
 #[contracttype]
@@ -35,6 +37,14 @@ pub struct EventEntry {
     pub event_type: Symbol,
     /// SHA-256 hash of the event payload for verification.
     pub payload_hash: BytesN<32>,
+}
+
+/// Per-contract event statistics (SC-17).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractStats {
+    /// Total number of events recorded for this contract.
+    pub event_count: u64,
 }
 
 /// Contract errors with explicit error codes.
@@ -184,7 +194,7 @@ impl SoroScanCore {
         let timestamp = env.ledger().timestamp();
 
         let record = EventRecord {
-            contract_id,
+            contract_id: contract_id.clone(),
             event_type: event_type.clone(),
             payload_hash,
             ledger,
@@ -198,6 +208,34 @@ impl SoroScanCore {
 
         // Store latest event by type
         env.storage().instance().set(&event_type, &record);
+
+        // Update per-contract event count (SC-17)
+        let mut contract_stats: Map<Address, ContractStats> = env
+            .storage()
+            .instance()
+            .get(&CONTRACT_STATS_KEY)
+            .unwrap_or(Map::new(&env));
+        let current_stats = contract_stats.get(contract_id.clone()).unwrap_or(ContractStats { event_count: 0 });
+        contract_stats.set(
+            contract_id.clone(),
+            ContractStats {
+                event_count: current_stats.event_count.saturating_add(1),
+            },
+        );
+        env.storage().instance().set(&CONTRACT_STATS_KEY, &contract_stats);
+
+        // Track unique event types per contract (SC-17)
+        let mut contract_types: Map<Address, Vec<Symbol>> = env
+            .storage()
+            .instance()
+            .get(&CONTRACT_EVENT_TYPES_KEY)
+            .unwrap_or(Map::new(&env));
+        let mut types = contract_types.get(contract_id.clone()).unwrap_or(Vec::new(&env));
+        if !types.contains(&event_type) {
+            types.push_back(event_type.clone());
+            contract_types.set(contract_id.clone(), types);
+            env.storage().instance().set(&CONTRACT_EVENT_TYPES_KEY, &contract_types);
+        }
 
         // Publish the event for off-chain indexers
         env.events()
@@ -227,6 +265,40 @@ impl SoroScanCore {
     /// The total event count
     pub fn total_events(env: Env) -> u64 {
         env.storage().instance().get(&COUNTER_KEY).unwrap_or(0)
+    }
+
+    /// Get the total event count for a specific contract (SC-17).
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `contract_id` - The contract address to query
+    ///
+    /// # Returns
+    /// The total event count for the contract
+    pub fn contract_event_count(env: Env, contract_id: Address) -> u64 {
+        let contract_stats: Option<Map<Address, ContractStats>> =
+            env.storage().instance().get(&CONTRACT_STATS_KEY);
+        match contract_stats {
+            Some(stats) => stats.get(contract_id).map(|s| s.event_count).unwrap_or(0),
+            None => 0,
+        }
+    }
+
+    /// Get the unique event types recorded for a specific contract (SC-17).
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `contract_id` - The contract address to query
+    ///
+    /// # Returns
+    /// A vector of event type Symbols for the contract
+    pub fn contract_event_types(env: Env, contract_id: Address) -> Vec<Symbol> {
+        let contract_types: Option<Map<Address, Vec<Symbol>>> =
+            env.storage().instance().get(&CONTRACT_EVENT_TYPES_KEY);
+        match contract_types {
+            Some(types) => types.get(contract_id).unwrap_or(Vec::new(&env)),
+            None => Vec::new(&env),
+        }
     }
 
     /// Check if an address is an authorized indexer.
@@ -283,6 +355,17 @@ impl SoroScanCore {
         let timestamp = env.ledger().timestamp();
         let mut count: u64 = env.storage().instance().get(&COUNTER_KEY).unwrap_or(0);
 
+        let mut contract_stats: Map<Address, ContractStats> = env
+            .storage()
+            .instance()
+            .get(&CONTRACT_STATS_KEY)
+            .unwrap_or(Map::new(&env));
+        let mut contract_types: Map<Address, Vec<Symbol>> = env
+            .storage()
+            .instance()
+            .get(&CONTRACT_EVENT_TYPES_KEY)
+            .unwrap_or(Map::new(&env));
+
         for entry in events.iter() {
             let record = EventRecord {
                 contract_id: entry.contract_id.clone(),
@@ -295,6 +378,22 @@ impl SoroScanCore {
             count = count.saturating_add(1);
             env.storage().instance().set(&entry.event_type, &record);
 
+            // Update per-contract event count (SC-17)
+            let current_stats = contract_stats.get(entry.contract_id.clone()).unwrap_or(ContractStats { event_count: 0 });
+            contract_stats.set(
+                entry.contract_id.clone(),
+                ContractStats {
+                    event_count: current_stats.event_count.saturating_add(1),
+                },
+            );
+
+            // Track unique event types per contract (SC-17)
+            let mut types = contract_types.get(entry.contract_id.clone()).unwrap_or(Vec::new(&env));
+            if !types.contains(&entry.event_type) {
+                types.push_back(entry.event_type.clone());
+                contract_types.set(entry.contract_id.clone(), types);
+            }
+
             env.events().publish(
                 (symbol_short!("soroscan"), entry.event_type.clone()),
                 record,
@@ -302,6 +401,8 @@ impl SoroScanCore {
         }
 
         env.storage().instance().set(&COUNTER_KEY, &count);
+        env.storage().instance().set(&CONTRACT_STATS_KEY, &contract_stats);
+        env.storage().instance().set(&CONTRACT_EVENT_TYPES_KEY, &contract_types);
 
         // Emit a single batch summary event
         env.events().publish(
@@ -635,6 +736,173 @@ mod tests {
 
         let result = client.try_init(&admin);
         assert_eq!(result, Err(Ok(ContractError::AlreadyInitialized)));
+    }
+
+    #[test]
+    fn test_contract_event_count() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (client, admin, indexer) = setup_contract(&env);
+        let target = Address::generate(&env);
+
+        client.add_indexer(&admin, &indexer);
+
+        // Initially zero for any contract
+        assert_eq!(client.contract_event_count(&target), 0);
+
+        // Record an event and check count
+        client.record_event(
+            &indexer,
+            &target,
+            &symbol_short!("swap"),
+            &BytesN::from_array(&env, &[0u8; 32]),
+        );
+        assert_eq!(client.contract_event_count(&target), 1);
+
+        // Record another event for the same contract
+        client.record_event(
+            &indexer,
+            &target,
+            &symbol_short!("transfer"),
+            &BytesN::from_array(&env, &[1u8; 32]),
+        );
+        assert_eq!(client.contract_event_count(&target), 2);
+
+        // Other contract is unaffected
+        let other = Address::generate(&env);
+        assert_eq!(client.contract_event_count(&other), 0);
+    }
+
+    #[test]
+    fn test_contract_event_types() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (client, admin, indexer) = setup_contract(&env);
+        let target = Address::generate(&env);
+
+        client.add_indexer(&admin, &indexer);
+
+        // Initially empty
+        let types = client.contract_event_types(&target);
+        assert_eq!(types.len(), 0);
+
+        // Record a swap event
+        client.record_event(
+            &indexer,
+            &target,
+            &symbol_short!("swap"),
+            &BytesN::from_array(&env, &[0u8; 32]),
+        );
+        let types = client.contract_event_types(&target);
+        assert_eq!(types.len(), 1);
+        assert!(types.contains(&symbol_short!("swap")));
+
+        // Record a transfer event
+        client.record_event(
+            &indexer,
+            &target,
+            &symbol_short!("transfer"),
+            &BytesN::from_array(&env, &[1u8; 32]),
+        );
+        let types = client.contract_event_types(&target);
+        assert_eq!(types.len(), 2);
+        assert!(types.contains(&symbol_short!("swap")));
+        assert!(types.contains(&symbol_short!("transfer")));
+
+        // Recording duplicate event type does not add it again
+        client.record_event(
+            &indexer,
+            &target,
+            &symbol_short!("swap"),
+            &BytesN::from_array(&env, &[2u8; 32]),
+        );
+        let types = client.contract_event_types(&target);
+        assert_eq!(types.len(), 2);
+    }
+
+    #[test]
+    fn test_contract_event_types_batch() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, SoroScanCore);
+        let client = SoroScanCoreClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let indexer = Address::generate(&env);
+        let target1 = Address::generate(&env);
+        let target2 = Address::generate(&env);
+
+        client.init(&admin);
+        client.add_indexer(&admin, &indexer);
+
+        // Batch events for two different contracts
+        let mut entries = Vec::new(&env);
+        entries.push_back(EventEntry {
+            contract_id: target1.clone(),
+            event_type: symbol_short!("swap"),
+            payload_hash: BytesN::from_array(&env, &[1u8; 32]),
+        });
+        entries.push_back(EventEntry {
+            contract_id: target1.clone(),
+            event_type: symbol_short!("mint"),
+            payload_hash: BytesN::from_array(&env, &[2u8; 32]),
+        });
+        entries.push_back(EventEntry {
+            contract_id: target2.clone(),
+            event_type: symbol_short!("transfer"),
+            payload_hash: BytesN::from_array(&env, &[3u8; 32]),
+        });
+
+        client.record_events_batch(&indexer, &entries);
+
+        assert_eq!(client.contract_event_count(&target1), 2);
+        assert_eq!(client.contract_event_count(&target2), 1);
+
+        let types1 = client.contract_event_types(&target1);
+        assert_eq!(types1.len(), 2);
+        assert!(types1.contains(&symbol_short!("swap")));
+        assert!(types1.contains(&symbol_short!("mint")));
+
+        let types2 = client.contract_event_types(&target2);
+        assert_eq!(types2.len(), 1);
+        assert!(types2.contains(&symbol_short!("transfer")));
+    }
+
+    #[test]
+    fn test_contract_event_count_multiple_contracts() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (client, admin, indexer) = setup_contract(&env);
+        let target_a = Address::generate(&env);
+        let target_b = Address::generate(&env);
+
+        client.add_indexer(&admin, &indexer);
+
+        client.record_event(
+            &indexer,
+            &target_a,
+            &symbol_short!("swap"),
+            &BytesN::from_array(&env, &[0u8; 32]),
+        );
+        client.record_event(
+            &indexer,
+            &target_a,
+            &symbol_short!("transfer"),
+            &BytesN::from_array(&env, &[1u8; 32]),
+        );
+        client.record_event(
+            &indexer,
+            &target_b,
+            &symbol_short!("mint"),
+            &BytesN::from_array(&env, &[2u8; 32]),
+        );
+
+        assert_eq!(client.contract_event_count(&target_a), 2);
+        assert_eq!(client.contract_event_count(&target_b), 1);
     }
 
     #[test]

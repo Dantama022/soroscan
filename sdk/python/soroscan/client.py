@@ -19,6 +19,7 @@ from soroscan.exceptions import (
 )
 from soroscan.models import (
     ContractEvent,
+    ContractEventTypeInfo,
     ContractStats,
     EventEntry,
     PaginatedResponse,
@@ -301,6 +302,21 @@ class SoroScanClient:
         response = self._client.get(url, headers=self._get_headers())
         data = self._handle_response(response)
         return ContractStats.model_validate(data)
+
+    def get_contract_event_types(self, contract_id: str) -> list[ContractEventTypeInfo]:
+        """
+        Get event types and their counts for a specific contract (SC-17).
+
+        Args:
+            contract_id: Contract address (C...)
+
+        Returns:
+            List of event type info with counts and first/last seen timestamps
+        """
+        url = urljoin(self.base_url, f"/api/contracts/{contract_id}/event-types/")
+        response = self._client.get(url, headers=self._get_headers())
+        data = self._handle_response(response)
+        return [ContractEventTypeInfo.model_validate(item) for item in data]
 
     def get_events(
         self,
@@ -808,6 +824,21 @@ class AsyncSoroScanClient:
         response = await self._client.get(url, headers=self._get_headers())
         data = self._handle_response(response)
         return ContractStats.model_validate(data)
+
+    async def get_contract_event_types(self, contract_id: str) -> list[ContractEventTypeInfo]:
+        """
+        Get event types and their counts for a specific contract (SC-17).
+
+        Args:
+            contract_id: Contract address (C...)
+
+        Returns:
+            List of event type info with counts and first/last seen timestamps
+        """
+        url = urljoin(self.base_url, f"/api/contracts/{contract_id}/event-types/")
+        response = await self._client.get(url, headers=self._get_headers())
+        data = self._handle_response(response)
+        return [ContractEventTypeInfo.model_validate(item) for item in data]
 
     async def get_events(
         self,

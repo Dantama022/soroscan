@@ -91,6 +91,17 @@ class RecordEventResponse(BaseModel):
     error: str | None = Field(None, description="Error message if failed")
 
 
+# ── SC-17: Contract event type info ───────────────────────────────────────────
+
+class ContractEventTypeInfo(BaseModel):
+    """Event type summary for a contract (SC-17)."""
+
+    event_type: str = Field(..., description="Event type name")
+    count: int = Field(..., description="Number of events of this type")
+    first_seen: str = Field(..., description="ISO timestamp of first occurrence")
+    last_seen: str = Field(..., description="ISO timestamp of last occurrence")
+
+
 # ── SC-29: Batch event recording ──────────────────────────────────────────────
 
 class EventEntry(BaseModel):

@@ -1,6 +1,7 @@
 import type {
   SoroScanClientConfig,
   SoroScanApiError,
+  ContractEventTypeInfo,
   GetEventsParams,
   GetEventsResponse,
   GetContractsParams,
@@ -176,6 +177,24 @@ export class SoroScanClient {
     return this.#request<Contract>(
       "GET",
       `/v1/contracts/${encodeURIComponent(contractId)}`
+    );
+  }
+
+  /**
+   * Get event types and their counts for a specific contract (SC-17).
+   *
+   * @example
+   * const types = await client.getContractEventTypes('CCAAA...');
+   * for (const t of types) {
+   *   console.log(t.eventType, t.count);
+   * }
+   */
+  async getContractEventTypes(
+    contractId: string
+  ): Promise<ContractEventTypeInfo[]> {
+    return this.#request<ContractEventTypeInfo[]>(
+      "GET",
+      `/v1/contracts/${encodeURIComponent(contractId)}/event-types`
     );
   }
 

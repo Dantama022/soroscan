@@ -104,6 +104,17 @@ def _handle_contracts(args: argparse.Namespace) -> int:
                 )
             return 0
 
+        if args.contract_command == "event-types":
+            types = client.get_contract_event_types(args.contract_id)
+            if args.output == "json":
+                _print_json(types)
+            else:
+                _print_table(
+                    types,
+                    ["event_type", "count", "first_seen", "last_seen"],
+                )
+            return 0
+
         response = client.get_contracts(
             is_active=args.active,
             search=args.search,
@@ -190,6 +201,14 @@ def build_parser() -> argparse.ArgumentParser:
     contracts_get.add_argument("contract_id")
     contracts_get.add_argument("--output", choices=["table", "json"], default="table")
     contracts_get.set_defaults(func=_handle_contracts)
+    contracts_event_types = contract_subcommands.add_parser(
+        "event-types", help="Get event types for a contract (SC-17)"
+    )
+    contracts_event_types.add_argument("contract_id", help="Contract address (C...)")
+    contracts_event_types.add_argument(
+        "--output", choices=["table", "json"], default="table"
+    )
+    contracts_event_types.set_defaults(func=_handle_contracts)
 
     return parser
 
