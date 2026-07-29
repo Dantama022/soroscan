@@ -31,6 +31,7 @@ from soroscan.throttles import IngestRateThrottle
 from soroscan.webhook_signing import build_x_signature_header, public_key_base64
 
 from .cache_utils import cache_result, get_or_set_json, query_cache_ttl, stable_cache_key
+from .decorators import validate_webhook_signature
 from .models import (
     APIKey,
     AdminAction,
@@ -1874,6 +1875,7 @@ def compliance_export_view(request):
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@validate_webhook_signature(lambda request: getattr(settings, "INDEXER_SECRET_KEY", "") or "")
 def webhook_batch_delivery_status_view(request):
     """
     POST /api/webhooks/deliveries/batch-status/
@@ -1973,6 +1975,7 @@ def webhook_batch_delivery_status_view(request):
 )
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+@validate_webhook_signature(lambda request: getattr(settings, "INDEXER_SECRET_KEY", "") or "")
 def webhook_delivery_metrics_view(request):
     """
     GET /api/webhooks/deliveries/metrics/
