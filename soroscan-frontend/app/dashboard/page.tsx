@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { LineChart, BarChart, PieChart, HeatmapChart } from "./components/Charts";
 
 type RegionState = "green" | "yellow" | "red";
 
@@ -191,6 +192,137 @@ export default function DashboardPage() {
           </article>
         </section>
 
+        {/* Interactive Charts Section */}
+        <section className="space-y-4">
+          <h2 className="text-lg text-terminal-cyan">[VISUALIZATION_DASHBOARD]</h2>
+
+          {/* Time Series Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <LineChart
+              data={snapshots.map((s, i) => ({
+                label: `T${i + 1}`,
+                value: s.apiP95Ms,
+              }))}
+              title="API Latency P95 Trend (ms)"
+              height={250}
+            />
+            <LineChart
+              data={snapshots.map((s, i) => ({
+                label: `T${i + 1}`,
+                value: s.cacheHitRate,
+              }))}
+              title="Cache Hit Rate Trend (%)"
+              height={250}
+            />
+          </div>
+
+          {/* Bar Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <BarChart
+              data={[
+                { label: "P95", value: current.apiP95Ms },
+                { label: "P99", value: current.apiP99Ms },
+              ]}
+              title="Request Latency Distribution (ms)"
+              height={220}
+            />
+            <BarChart
+              data={[
+                { label: "CPU", value: current.cpuUtilization },
+                { label: "Memory", value: current.memoryUtilization },
+                { label: "Cache", value: current.cacheHitRate },
+              ]}
+              title="System Resource Utilization (%)"
+              height={220}
+            />
+          </div>
+
+          {/* Pie and Heatmap */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <PieChart
+              data={[
+                { label: "Healthy", value: 2 },
+                { label: "Degraded", value: 1 },
+                { label: "Critical", value: 0 },
+              ]}
+              title="System State Distribution"
+            />
+            <HeatmapChart
+              data={[
+                [50, 60, 70, 80],
+                [55, 65, 75, 85],
+                [60, 70, 80, 90],
+              ]}
+              title="CPU Usage Heatmap (Hourly)"
+            />
+          </div>
+        </section>
+
+        {/* Export Section */}
+        <section className="rounded border border-terminal-magenta/20 p-4">
+          <p className="text-xs text-terminal-magenta mb-3">[EXPORT_OPTIONS]</p>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                const svg = document.querySelector("svg");
+                if (svg) {
+                  const svgData = new XMLSerializer().serializeToString(svg);
+                  const canvas = document.createElement("canvas");
+                  const ctx = canvas.getContext("2d");
+                  if (ctx) {
+                    const img = new Image();
+                    img.onload = () => {
+                      ctx.drawImage(img, 0, 0);
+                      const link = document.createElement("a");
+                      link.href = canvas.toDataURL("image/png");
+                      link.download = `dashboard-${Date.now()}.png`;
+                      link.click();
+                    };
+                    img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
+                  }
+                }
+              }}
+              className="rounded border border-terminal-magenta/40 px-3 py-2 text-terminal-magenta hover:bg-terminal-magenta/10"
+            >
+              Export as PNG
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const data = {
+                  exportDate: new Date().toISOString(),
+                  currentMetrics: current,
+                  snapshots,
+                };
+                const blob = new Blob([JSON.stringify(data, null, 2)], {
+                  type: "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `metrics-${Date.now()}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="rounded border border-terminal-green/40 px-3 py-2 hover:bg-terminal-green/10"
+            >
+              Export as JSON
+            </button>
+          </div>
+        </section>
+
+        <section className="flex gap-2">
+          {snapshots.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setIndex(i)}
+              className={`rounded border px-3 py-1 text-xs ${index === i ? "border-terminal-green text-terminal-green" : "border-terminal-gray/40 text-terminal-gray"}`}
+            >
+              Snapshot {i + 1}
+            </button>
+          ))}
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <article className="rounded border border-terminal-yellow/20 p-4">
             <h2 className="mb-3 text-sm text-terminal-yellow">Incident Timeline</h2>
