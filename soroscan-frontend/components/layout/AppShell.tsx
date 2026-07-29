@@ -52,9 +52,10 @@ function NavLink({
     <Link
       href={href}
       onClick={onNavigate}
+      aria-current={isActive ? "page" : undefined}
       className={cn(
         "flex items-center gap-3 min-h-[44px] px-4 py-2 text-sm font-terminal-mono transition-colors rounded-sm",
-        "border-l-4",
+        "border-l-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terminal-green",
         isActive
           ? "border-terminal-green bg-terminal-green/10 text-terminal-green shadow-[0_0_12px_rgba(0,255,65,0.15)]"
           : "border-transparent text-terminal-gray hover:text-terminal-green hover:bg-terminal-green/5 hover:border-terminal-green/40",
@@ -102,6 +103,14 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-terminal-black text-terminal-green font-terminal-mono">
+      {/* Skip to main content link for screen reader and keyboard accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-terminal-green focus:text-terminal-black focus:font-bold focus:rounded focus:outline-none focus:ring-2 focus:ring-terminal-cyan"
+      >
+        Skip to main content
+      </a>
+
       {/* Top header */}
       <header className="sticky top-0 z-30 flex h-[60px] items-center gap-3 border-b border-terminal-green/30 bg-gradient-to-r from-terminal-black to-[#1a1f3a] px-4">
         <HamburgerToggle
@@ -113,14 +122,14 @@ export function AppShell({ children }: AppShellProps) {
 
         <Link
           href="/dashboard"
-          className="text-lg font-bold tracking-wider text-terminal-green hover:text-terminal-cyan transition-colors min-h-[44px] inline-flex items-center"
+          className="text-lg font-bold tracking-wider text-terminal-green hover:text-terminal-cyan transition-colors min-h-[44px] inline-flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terminal-green"
         >
           ◆ SoroScan
         </Link>
 
         <div className="ml-auto flex items-center gap-2">
           <OrganizationSwitcher className="hidden sm:block" />
-          <div className="hidden sm:flex items-center gap-1">
+          <nav className="hidden sm:flex items-center gap-1" aria-label="Header navigation">
             {navItems.map((item) => {
               const isActive =
                 pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -128,8 +137,9 @@ export function AppShell({ children }: AppShellProps) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "min-h-[44px] min-w-[44px] inline-flex items-center justify-center px-3 text-xs uppercase tracking-wider transition-colors",
+                    "min-h-[44px] min-w-[44px] inline-flex items-center justify-center px-3 text-xs uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terminal-green",
                     isActive
                       ? "text-terminal-green border-b-2 border-terminal-green"
                       : "text-terminal-gray hover:text-terminal-green",
@@ -139,7 +149,7 @@ export function AppShell({ children }: AppShellProps) {
                 </Link>
               );
             })}
-          </div>
+          </nav>
         </div>
       </header>
 
@@ -168,7 +178,9 @@ export function AppShell({ children }: AppShellProps) {
         </Drawer>
 
         {/* Main content */}
-        <main className="flex-1 min-w-0">{children}</main>
+        <main id="main-content" tabIndex={-1} className="flex-1 min-w-0 focus:outline-none">
+          {children}
+        </main>
       </div>
     </div>
   );
