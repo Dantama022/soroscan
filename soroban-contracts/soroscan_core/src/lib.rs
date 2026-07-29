@@ -244,6 +244,79 @@ impl SoroScanCore {
         Ok(count)
     }
 
+    /// Record an SC-38 structured event.
+    ///
+    /// `correlation_id` makes producer retries safe: a duplicate is rejected
+    /// before incrementing the counter or publishing a second event.
+    pub fn record_structured_event(
+        env: Env,
+        indexer: Address,
+        contract_id: Address,
+        event_type: Symbol,
+        payload_hash: BytesN<32>,
+        schema_version: u32,
+        correlation_id: BytesN<32>,
+    ) -> Result<u64, ContractError> {
+        indexer.require_auth();
+
+        if schema_version == 0 {
+            return Err(ContractError::InvalidSchemaVersion);
+        }
+
+        let indexers: Map<Address, bool> = env
+            .storage()
+            .instance()
+            .get(&INDEXERS_KEY)
+            .ok_or(ContractError::NotInitialized)?;
+        if !indexers.get(indexer).unwrap_or(false) {
+            return Err(ContractError::IndexerNotFound);
+        }
+
+        let correlation_key = DataKey::StructuredByCorrelation(correlation_id.clone());
+        if env.storage().instance().has(&correlation_key) {
+            return Err(ContractError::DuplicateCorrelation);
+        }
+
+        let record = StructuredEventRecord {
+            contract_id,
+            event_type: event_type.clone(),
+            payload_hash,
+            schema_version,
+            correlation_id,
+            ledger: env.ledger().sequence(),
+            timestamp: env.ledger().timestamp(),
+        };
+
+        let count = env
+            .storage()
+            .instance()
+            .get::<Symbol, u64>(&COUNTER_KEY)
+            .unwrap_or(0)
+            .saturating_add(1);
+        env.storage().instance().set(&COUNTER_KEY, &count);
+        env.storage().instance().set(&correlation_key, &record);
+        env.storage().instance().set(
+            &DataKey::LatestStructuredByType(event_type.clone()),
+            &record,
+        );
+        env.events().publish(
+            (symbol_short!("soroscan"), symbol_short!("sc38"), event_type),
+            record,
+        );
+
+        Ok(count)
+    }
+
+    /// Get a structured event by its SC-38 correlation ID.
+    pub fn structured_by_correlation(
+        env: Env,
+        correlation_id: BytesN<32>,
+    ) -> Option<StructuredEventRecord> {
+        env.storage()
+            .instance()
+            .get(&DataKey::StructuredByCorrelation(correlation_id))
+    }
+
     /// Get the latest event record for a specific event type.
     ///
     /// # Arguments
