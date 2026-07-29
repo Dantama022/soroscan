@@ -12,11 +12,14 @@ import {
   Settings,
   Shield,
   Building2,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/ui/drawer";
 import { HamburgerToggle } from "@/components/ui/hamburger-toggle";
 import { OrganizationSwitcher } from "@/components/organization/OrganizationSwitcher";
+import { useTheme } from "@/hooks/useTheme";
 
 const navItems = [
   { href: "/dashboard", label: "Events", icon: LayoutDashboard },
@@ -96,12 +99,14 @@ function SidebarNav({
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const { theme, toggleTheme, mounted } = useTheme();
 
   React.useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
 
   return (
+    <div className="min-h-screen bg-terminal-black text-terminal-green font-terminal-mono transition-colors duration-200">
     <div className="min-h-screen bg-terminal-black text-terminal-green font-terminal-mono">
       {/* Skip to main content link for screen reader and keyboard accessibility */}
       <a
@@ -129,6 +134,22 @@ export function AppShell({ children }: AppShellProps) {
 
         <div className="ml-auto flex items-center gap-2">
           <OrganizationSwitcher className="hidden sm:block" />
+
+          {/* Theme Toggle Button */}
+          {mounted && (
+            <button
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded p-2 text-terminal-gray hover:text-terminal-green transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terminal-green"
+            >
+              {theme === "dark" ? (
+                <Sun className="h-5 w-5 text-terminal-warning" aria-hidden="true" />
+              ) : (
+                <Moon className="h-5 w-5 text-terminal-cyan" aria-hidden="true" />
+              )}
+            </button>
+          )}
+
           <nav className="hidden sm:flex items-center gap-1" aria-label="Header navigation">
             {navItems.map((item) => {
               const isActive =
