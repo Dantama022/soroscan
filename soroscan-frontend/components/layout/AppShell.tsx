@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Activity,
+  Radio,
   FileCode2,
   Webhook,
   Settings,
@@ -20,6 +21,7 @@ import { OrganizationSwitcher } from "@/components/organization/OrganizationSwit
 const navItems = [
   { href: "/dashboard", label: "Events", icon: LayoutDashboard },
   { href: "/performance", label: "Performance", icon: Activity },
+  { href: "/live", label: "Live Stream", icon: Radio },
   { href: "/contracts", label: "Contracts", icon: FileCode2 },
   { href: "/webhooks", label: "Webhooks", icon: Webhook },
   { href: "/organization", label: "Org", icon: Building2 },
