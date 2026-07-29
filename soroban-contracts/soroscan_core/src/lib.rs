@@ -379,4 +379,157 @@ mod tests {
         let result = client.try_init(&admin);
         assert_eq!(result, Err(Ok(ContractError::AlreadyInitialized)));
     }
+
+    #[test]
+    fn test_event_decoding_and_types() {
+        use soroban_sdk::{TryFromVal, Val};
+
+        let env = Env::default();
+        let _contract_id = env.register_contract(None, SoroScanCore);
+
+        // Define complex variables of 10+ Soroban types:
+        let val_bool: bool = true;
+        let val_u32: u32 = 42;
+        let val_i32: i32 = -42;
+        let val_u64: u64 = 1000000;
+        let val_i64: i64 = -1000000;
+        let val_u128: u128 = 12345678901234567890;
+        let val_i128: i128 = -12345678901234567890;
+        let val_symbol = symbol_short!("test");
+        let val_address = Address::generate(&env);
+
+        let mut val_bytes = soroban_sdk::Bytes::new(&env);
+        val_bytes.append(&soroban_sdk::Bytes::from_array(&env, &[1, 2, 3]));
+
+        let val_bytes_n = BytesN::from_array(&env, &[9u8; 32]);
+
+        let mut val_map = Map::<Symbol, u32>::new(&env);
+        val_map.set(symbol_short!("key1"), 100);
+        val_map.set(symbol_short!("key2"), 200);
+
+        let mut val_vec = soroban_sdk::Vec::<Symbol>::new(&env);
+        val_vec.push_back(symbol_short!("item1"));
+        val_vec.push_back(symbol_short!("item2"));
+
+        // Emitting events with various topics and payloads to test topic extraction and symbol parsing
+        // Event 1: Testing simple types
+        env.events().publish(
+            (symbol_short!("event1"), val_symbol.clone(), val_bool),
+            (val_u32, val_i32, val_u64, val_i64),
+        );
+
+        // Event 2: Testing large integers and Address
+        env.events().publish(
+            (symbol_short!("event2"), val_address.clone()),
+            (val_u128, val_i128),
+        );
+
+        // Event 3: Testing Bytes, BytesN, Map, Vec
+        env.events().publish(
+            (symbol_short!("event3"),),
+            (val_bytes.clone(), val_bytes_n.clone(), val_map.clone(), val_vec.clone()),
+        );
+
+        // Event 4: Edge case - Empty topics (Note: Soroban events require at least 1 topic, but we can test emitting a tuple with 1 topic and empty data)
+        env.events().publish(
+            (symbol_short!("empty"),),
+            (),
+        );
+
+        // Event 5: Edge case - Large Payload
+        let mut large_map = Map::<u32, BytesN<32>>::new(&env);
+        for i in 0..10 {
+            large_map.set(i, BytesN::from_array(&env, &[i as u8; 32]));
+        }
+        env.events().publish(
+            (symbol_short!("large"),),
+            large_map.clone(),
+        );
+
+        // Retrieve and decode all published events
+        let all_events = env.events().all();
+        assert!(all_events.len() >= 5);
+
+        // Find the event with topic "event1"
+        let event1 = all_events.iter().find(|e| {
+            if e.topics.len() > 0 {
+                if let Ok(sym) = Symbol::try_from_val(&env, &e.topics.get(0).unwrap()) {
+                    return sym == symbol_short!("event1");
+                }
+            }
+            false
+        }).expect("event1 should exist");
+
+        // Verify topic extraction
+        assert_eq!(event1.topics.len(), 3);
+        let extracted_sym = Symbol::try_from_val(&env, &event1.topics.get(1).unwrap()).unwrap();
+        assert_eq!(extracted_sym, val_symbol);
+        let extracted_bool = bool::try_from_val(&env, &event1.topics.get(2).unwrap()).unwrap();
+        assert_eq!(extracted_bool, val_bool);
+
+        // Verify payload decoding
+        let payload1: (u32, i32, u64, i64) = TryFromVal::try_from_val(&env, &event1.value).unwrap();
+        assert_eq!(payload1.0, val_u32);
+        assert_eq!(payload1.1, val_i32);
+        assert_eq!(payload1.2, val_u64);
+        assert_eq!(payload1.3, val_i64);
+
+        // Find event2
+        let event2 = all_events.iter().find(|e| {
+            if e.topics.len() > 0 {
+                if let Ok(sym) = Symbol::try_from_val(&env, &e.topics.get(0).unwrap()) {
+                    return sym == symbol_short!("event2");
+                }
+            }
+            false
+        }).expect("event2 should exist");
+
+        let extracted_addr = Address::try_from_val(&env, &event2.topics.get(1).unwrap()).unwrap();
+        assert_eq!(extracted_addr, val_address);
+
+        let payload2: (u128, i128) = TryFromVal::try_from_val(&env, &event2.value).unwrap();
+        assert_eq!(payload2.0, val_u128);
+        assert_eq!(payload2.1, val_i128);
+
+        // Find event3
+        let event3 = all_events.iter().find(|e| {
+            if e.topics.len() > 0 {
+                if let Ok(sym) = Symbol::try_from_val(&env, &e.topics.get(0).unwrap()) {
+                    return sym == symbol_short!("event3");
+                }
+            }
+            false
+        }).expect("event3 should exist");
+
+        let payload3: (soroban_sdk::Bytes, BytesN<32>, Map<Symbol, u32>, soroban_sdk::Vec<Symbol>) =
+            TryFromVal::try_from_val(&env, &event3.value).unwrap();
+        assert_eq!(payload3.0, val_bytes);
+        assert_eq!(payload3.1, val_bytes_n);
+        assert_eq!(payload3.2.get(symbol_short!("key1")).unwrap(), 100);
+        assert_eq!(payload3.3.get(0).unwrap(), symbol_short!("item1"));
+
+        // Find empty event
+        let event_empty = all_events.iter().find(|e| {
+            if e.topics.len() > 0 {
+                if let Ok(sym) = Symbol::try_from_val(&env, &e.topics.get(0).unwrap()) {
+                    return sym == symbol_short!("empty");
+                }
+            }
+            false
+        }).expect("empty event should exist");
+        assert_eq!(event_empty.topics.len(), 1); // just "empty"
+
+        // Find large event
+        let event_large = all_events.iter().find(|e| {
+            if e.topics.len() > 0 {
+                if let Ok(sym) = Symbol::try_from_val(&env, &e.topics.get(0).unwrap()) {
+                    return sym == symbol_short!("large");
+                }
+            }
+            false
+        }).expect("large event should exist");
+        let payload_large: Map<u32, BytesN<32>> = TryFromVal::try_from_val(&env, &event_large.value).unwrap();
+        assert_eq!(payload_large.len(), 10);
+        assert_eq!(payload_large.get(5).unwrap(), BytesN::from_array(&env, &[5u8; 32]));
+    }
 }

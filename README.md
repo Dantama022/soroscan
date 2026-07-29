@@ -64,7 +64,7 @@ soroscan/
 
 ## Environment Configuration
 
-See [ENVIRONMENT.md](ENVIRONMENT.md) for the complete list of required and optional environment variables, their types and defaults, and development, testing, and production examples.
+See [ENVIRONMENT.md](docs/ENVIRONMENT.md) for the complete list of required and optional environment variables, their types and defaults, and development, testing, and production examples.
 
 ---
 
