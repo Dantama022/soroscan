@@ -4,6 +4,7 @@ import "./globals.css"
 import { Providers } from "./providers"
 import { SkipToContent } from "@/components/ui/SkipToContent"
 import { WebVitalsReporter } from "@/components/WebVitalsReporter"
+import CookieConsentBanner from "@/components/compliance/CookieConsentBanner"
 
 const inter = Inter({
   variable: "--font-inter",
@@ -95,6 +96,7 @@ export default function RootLayout({
           <main id="main-content">
             {children}
           </main>
+          <CookieConsentBanner />
         </Providers>
       </body>
     </html>

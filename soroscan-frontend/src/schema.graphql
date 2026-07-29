@@ -20,9 +20,25 @@ type Query {
   organizationActivity(organizationId: String!): [OrgActivityEntry!]!
 }
 
+type DataExportResponse {
+  requestId: String!
+  status: String!
+  expiresAt: String!
+  downloadUrl: String
+}
+
+type DeletionRequestResponse {
+  requestId: String!
+  status: String!
+  approvalDate: String
+}
+
+
 type Mutation {
   login(email: String!, password: String!): AuthPayload!
   refreshToken(refresh: String!): AuthPayload!
+  requestGDPRDataExport(organizationId: String!, format: String!): DataExportResponse!
+  requestRightToBeForgotten(userId: String!, reason: String): DeletionRequestResponse!
 
   createOrganization(input: CreateOrganizationInput!): Organization!
   updateOrganization(id: String!, input: UpdateOrganizationInput!): Organization!

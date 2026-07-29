@@ -32,6 +32,21 @@ export type ContractEvent = {
   timestamp: Scalars['String']['output'];
 };
 
+export type DataExportResponse = {
+  __typename?: 'DataExportResponse';
+  downloadUrl?: Maybe<Scalars['String']['output']>;
+  expiresAt: Scalars['String']['output'];
+  requestId: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+};
+
+export type DeletionRequestResponse = {
+  __typename?: 'DeletionRequestResponse';
+  approvalDate?: Maybe<Scalars['String']['output']>;
+  requestId: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+};
+
 export type ErrorLog = {
   __typename?: 'ErrorLog';
   context?: Maybe<Scalars['String']['output']>;
@@ -64,6 +79,8 @@ export type Mutation = {
   __typename?: 'Mutation';
   login: AuthPayload;
   refreshToken: AuthPayload;
+  requestGDPRDataExport: DataExportResponse;
+  requestRightToBeForgotten: DeletionRequestResponse;
 };
 
 
@@ -75,6 +92,18 @@ export type MutationLoginArgs = {
 
 export type MutationRefreshTokenArgs = {
   refresh: Scalars['String']['input'];
+};
+
+
+export type MutationRequestGdprDataExportArgs = {
+  format: Scalars['String']['input'];
+  organizationId: Scalars['String']['input'];
+};
+
+
+export type MutationRequestRightToBeForgottenArgs = {
+  reason?: InputMaybe<Scalars['String']['input']>;
+  userId: Scalars['String']['input'];
 };
 
 export type Query = {
@@ -129,6 +158,21 @@ export type GetSystemMetricsQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type GetSystemMetricsQuery = { __typename?: 'Query', systemMetrics: { __typename?: 'SystemMetrics', eventsIndexedToday: number, eventsIndexedTotal: number, webhookSuccessRate: number, avgWebhookDeliveryTime: number, activeContracts: number, lastSynced?: string | null, dbStatus: string, redisStatus: string }, recentErrors: Array<{ __typename?: 'ErrorLog', id: string, timestamp: string, level: string, message: string, context?: string | null }> };
 
+export type RequestDataGdprExportMutationVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+  format: Scalars['String']['input'];
+}>;
+
+
+export type RequestDataGdprExportMutation = { __typename?: 'Mutation', requestGDPRDataExport: { __typename?: 'DataExportResponse', requestId: string, status: string, expiresAt: string, downloadUrl?: string | null } };
+
+export type RequestRightToBeForgottenMutationVariables = Exact<{
+  userId: Scalars['String']['input'];
+  reason?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type RequestRightToBeForgottenMutation = { __typename?: 'Mutation', requestRightToBeForgotten: { __typename?: 'DeletionRequestResponse', requestId: string, status: string, approvalDate?: string | null } };
 export type SaveSearchPlaceholderQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -166,6 +210,8 @@ export type GetEventsQuery = { __typename?: 'Query', events: { __typename?: 'Eve
 
 
 export const GetSystemMetricsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetSystemMetrics"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"systemMetrics"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"eventsIndexedToday"}},{"kind":"Field","name":{"kind":"Name","value":"eventsIndexedTotal"}},{"kind":"Field","name":{"kind":"Name","value":"webhookSuccessRate"}},{"kind":"Field","name":{"kind":"Name","value":"avgWebhookDeliveryTime"}},{"kind":"Field","name":{"kind":"Name","value":"activeContracts"}},{"kind":"Field","name":{"kind":"Name","value":"lastSynced"}},{"kind":"Field","name":{"kind":"Name","value":"dbStatus"}},{"kind":"Field","name":{"kind":"Name","value":"redisStatus"}}]}},{"kind":"Field","name":{"kind":"Name","value":"recentErrors"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"IntValue","value":"10"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"timestamp"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"context"}}]}}]}}]} as unknown as DocumentNode<GetSystemMetricsQuery, GetSystemMetricsQueryVariables>;
+export const RequestDataGdprExportDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RequestDataGDPRExport"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organizationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"format"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestGDPRDataExport"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organizationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organizationId"}}},{"kind":"Argument","name":{"kind":"Name","value":"format"},"value":{"kind":"Variable","name":{"kind":"Name","value":"format"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"downloadUrl"}}]}}]}}]} as unknown as DocumentNode<RequestDataGdprExportMutation, RequestDataGdprExportMutationVariables>;
+export const RequestRightToBeForgottenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RequestRightToBeForgotten"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"reason"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestRightToBeForgotten"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}},{"kind":"Argument","name":{"kind":"Name","value":"reason"},"value":{"kind":"Variable","name":{"kind":"Name","value":"reason"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"approvalDate"}}]}}]}}]} as unknown as DocumentNode<RequestRightToBeForgottenMutation, RequestRightToBeForgottenMutationVariables>;
 export const SaveSearchPlaceholderDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SaveSearchPlaceholder"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"me"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"email"}}]}}]}}]} as unknown as DocumentNode<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>;
 export const LoginDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"Login"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"email"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"password"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"email"},"value":{"kind":"Variable","name":{"kind":"Name","value":"email"}}},{"kind":"Argument","name":{"kind":"Name","value":"password"},"value":{"kind":"Variable","name":{"kind":"Name","value":"password"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"access"}},{"kind":"Field","name":{"kind":"Name","value":"refresh"}},{"kind":"Field","name":{"kind":"Name","value":"user"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"email"}}]}}]}}]}}]} as unknown as DocumentNode<LoginMutation, LoginMutationVariables>;
 export const RefreshTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RefreshToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"refresh"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"refreshToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"refresh"},"value":{"kind":"Variable","name":{"kind":"Name","value":"refresh"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"access"}},{"kind":"Field","name":{"kind":"Name","value":"refresh"}}]}}]}}]} as unknown as DocumentNode<RefreshTokenMutation, RefreshTokenMutationVariables>;

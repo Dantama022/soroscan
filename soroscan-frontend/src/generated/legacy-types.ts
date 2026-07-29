@@ -30,6 +30,21 @@ export type ContractEvent = {
   timestamp: Scalars['String']['output'];
 };
 
+export type DataExportResponse = {
+  __typename?: 'DataExportResponse';
+  downloadUrl?: Maybe<Scalars['String']['output']>;
+  expiresAt: Scalars['String']['output'];
+  requestId: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+};
+
+export type DeletionRequestResponse = {
+  __typename?: 'DeletionRequestResponse';
+  approvalDate?: Maybe<Scalars['String']['output']>;
+  requestId: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+};
+
 export type ErrorLog = {
   __typename?: 'ErrorLog';
   context?: Maybe<Scalars['String']['output']>;
@@ -62,6 +77,8 @@ export type Mutation = {
   __typename?: 'Mutation';
   login: AuthPayload;
   refreshToken: AuthPayload;
+  requestGDPRDataExport: DataExportResponse;
+  requestRightToBeForgotten: DeletionRequestResponse;
 };
 
 
@@ -73,6 +90,18 @@ export type MutationLoginArgs = {
 
 export type MutationRefreshTokenArgs = {
   refresh: Scalars['String']['input'];
+};
+
+
+export type MutationRequestGdprDataExportArgs = {
+  format: Scalars['String']['input'];
+  organizationId: Scalars['String']['input'];
+};
+
+
+export type MutationRequestRightToBeForgottenArgs = {
+  reason?: InputMaybe<Scalars['String']['input']>;
+  userId: Scalars['String']['input'];
 };
 
 export type Query = {
@@ -127,6 +156,21 @@ export type GetSystemMetricsQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type GetSystemMetricsQuery = { __typename?: 'Query', systemMetrics: { __typename?: 'SystemMetrics', eventsIndexedToday: number, eventsIndexedTotal: number, webhookSuccessRate: number, avgWebhookDeliveryTime: number, activeContracts: number, lastSynced?: string | null, dbStatus: string, redisStatus: string }, recentErrors: Array<{ __typename?: 'ErrorLog', id: string, timestamp: string, level: string, message: string, context?: string | null }> };
 
+export type RequestDataGdprExportMutationVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+  format: Scalars['String']['input'];
+}>;
+
+
+export type RequestDataGdprExportMutation = { __typename?: 'Mutation', requestGDPRDataExport: { __typename?: 'DataExportResponse', requestId: string, status: string, expiresAt: string, downloadUrl?: string | null } };
+
+export type RequestRightToBeForgottenMutationVariables = Exact<{
+  userId: Scalars['String']['input'];
+  reason?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type RequestRightToBeForgottenMutation = { __typename?: 'Mutation', requestRightToBeForgotten: { __typename?: 'DeletionRequestResponse', requestId: string, status: string, approvalDate?: string | null } };
 export type SaveSearchPlaceholderQueryVariables = Exact<{ [key: string]: never; }>;
 
 

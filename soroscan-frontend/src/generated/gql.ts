@@ -15,6 +15,7 @@ import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-
  */
 type Documents = {
     "query GetSystemMetrics {\n  systemMetrics {\n    eventsIndexedToday\n    eventsIndexedTotal\n    webhookSuccessRate\n    avgWebhookDeliveryTime\n    activeContracts\n    lastSynced\n    dbStatus\n    redisStatus\n  }\n  recentErrors(limit: 10) {\n    id\n    timestamp\n    level\n    message\n    context\n  }\n}": typeof types.GetSystemMetricsDocument,
+    "mutation RequestDataGDPRExport($organizationId: String!, $format: String!) {\n  requestGDPRDataExport(organizationId: $organizationId, format: $format) {\n    requestId\n    status\n    expiresAt\n    downloadUrl\n  }\n}\n\nmutation RequestRightToBeForgotten($userId: String!, $reason: String) {\n  requestRightToBeForgotten(userId: $userId, reason: $reason) {\n    requestId\n    status\n    approvalDate\n  }\n}": typeof types.RequestDataGdprExportDocument,
     "query SaveSearchPlaceholder {\n  me {\n    id\n    email\n  }\n}": typeof types.SaveSearchPlaceholderDocument,
     "mutation Login($email: String!, $password: String!) {\n  login(email: $email, password: $password) {\n    access\n    refresh\n    user {\n      id\n      email\n    }\n  }\n}\n\nmutation RefreshToken($refresh: String!) {\n  refreshToken(refresh: $refresh) {\n    access\n    refresh\n  }\n}": typeof types.LoginDocument,
     "subscription OnContractEvent($contractId: String!) {\n  contractEvent(contractId: $contractId) {\n    id\n    eventType\n    ledgerSequence\n    timestamp\n    payload\n  }\n}": typeof types.OnContractEventDocument,
@@ -22,6 +23,7 @@ type Documents = {
 };
 const documents: Documents = {
     "query GetSystemMetrics {\n  systemMetrics {\n    eventsIndexedToday\n    eventsIndexedTotal\n    webhookSuccessRate\n    avgWebhookDeliveryTime\n    activeContracts\n    lastSynced\n    dbStatus\n    redisStatus\n  }\n  recentErrors(limit: 10) {\n    id\n    timestamp\n    level\n    message\n    context\n  }\n}": types.GetSystemMetricsDocument,
+    "mutation RequestDataGDPRExport($organizationId: String!, $format: String!) {\n  requestGDPRDataExport(organizationId: $organizationId, format: $format) {\n    requestId\n    status\n    expiresAt\n    downloadUrl\n  }\n}\n\nmutation RequestRightToBeForgotten($userId: String!, $reason: String) {\n  requestRightToBeForgotten(userId: $userId, reason: $reason) {\n    requestId\n    status\n    approvalDate\n  }\n}": types.RequestDataGdprExportDocument,
     "query SaveSearchPlaceholder {\n  me {\n    id\n    email\n  }\n}": types.SaveSearchPlaceholderDocument,
     "mutation Login($email: String!, $password: String!) {\n  login(email: $email, password: $password) {\n    access\n    refresh\n    user {\n      id\n      email\n    }\n  }\n}\n\nmutation RefreshToken($refresh: String!) {\n  refreshToken(refresh: $refresh) {\n    access\n    refresh\n  }\n}": types.LoginDocument,
     "subscription OnContractEvent($contractId: String!) {\n  contractEvent(contractId: $contractId) {\n    id\n    eventType\n    ledgerSequence\n    timestamp\n    payload\n  }\n}": types.OnContractEventDocument,
@@ -49,7 +51,7 @@ export function gql(source: "query GetSystemMetrics {\n  systemMetrics {\n    ev
 /**
  * The gql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function gql(source: "query SaveSearchPlaceholder {\n  me {\n    id\n    email\n  }\n}"): (typeof documents)["query SaveSearchPlaceholder {\n  me {\n    id\n    email\n  }\n}"];
+export function gql(source: "mutation RequestDataGDPRExport($organizationId: String!, $format: String!) {\n  requestGDPRDataExport(organizationId: $organizationId, format: $format) {\n    requestId\n    status\n    expiresAt\n    downloadUrl\n  }\n}\n\nmutation RequestRightToBeForgotten($userId: String!, $reason: String) {\n  requestRightToBeForgotten(userId: $userId, reason: $reason) {\n    requestId\n    status\n    approvalDate\n  }\n}"): (typeof documents)["mutation RequestDataGDPRExport($organizationId: String!, $format: String!) {\n  requestGDPRDataExport(organizationId: $organizationId, format: $format) {\n    requestId\n    status\n    expiresAt\n    downloadUrl\n  }\n}\n\nmutation RequestRightToBeForgotten($userId: String!, $reason: String) {\n  requestRightToBeForgotten(userId: $userId, reason: $reason) {\n    requestId\n    status\n    approvalDate\n  }\n}"];
 /**
  * The gql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
