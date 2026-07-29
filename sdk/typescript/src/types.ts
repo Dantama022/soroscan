@@ -345,6 +345,49 @@ export interface RecordEventsBatchResponse {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WebSocket
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface WebSocketClientConfig {
+  /** Base URL of the SoroScan WebSocket server (e.g., "wss://api.soroscan.io") */
+  wsUrl: string;
+
+  /** Optional API key for authentication */
+  apiKey?: string;
+
+  /** Initial reconnection delay in milliseconds (default: 1000) */
+  initialReconnectDelay?: number;
+
+  /** Maximum reconnection delay in milliseconds (default: 30000) */
+  maxReconnectDelay?: number;
+
+  /** Backoff multiplier for exponential backoff (default: 2) */
+  backoffMultiplier?: number;
+
+  /** Whether to add jitter to reconnection delays (default: true) */
+  useJitter?: boolean;
+
+  /** Maximum messages to buffer while disconnected (default: 1000) */
+  maxBufferSize?: number;
+}
+
+export type EventCallback = (event: ContractEvent) => void;
+export type ConnectionCallback = () => void;
+export type ErrorCallback = (error: Error) => void;
+export type ReconnectingCallback = (attempt: number, delay: number) => void;
+
+export interface EventFilter {
+  /** Filter by contract ID */
+  contractId?: string;
+
+  /** Filter by event type */
+  eventType?: EventType;
+
+  /** Filter by topics */
+  topics?: Partial<ContractEventTopic>[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Errors
 // ─────────────────────────────────────────────────────────────────────────────
 

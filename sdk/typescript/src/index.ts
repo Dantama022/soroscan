@@ -1,5 +1,6 @@
 export { SoroScanClient, SoroScanError, Paginator } from "./client.js";
 export { verifyWebhookSignature } from "./webhookVerification.js";
+export { WebSocketClient } from "./websocket-client.js";
 export type {
   // Config
   SoroScanClientConfig,
@@ -53,6 +54,13 @@ export type {
   EventEntry,
   RecordEventsBatchParams,
   RecordEventsBatchResponse,
+  // WebSocket
+  WebSocketClientConfig,
+  EventCallback,
+  ConnectionCallback,
+  ErrorCallback,
+  ReconnectingCallback,
+  EventFilter,
   // Errors
   SoroScanApiError,
 } from "./types.js";
