@@ -1,140 +1,267 @@
-/**
- * Badge Component Tests
- * ──────────────────────────────────────────────────────────────────────────────
- * Tests for the reusable Badge component including all variants and features.
- */
-import { render, screen } from "@testing-library/react";
-import { Check, AlertTriangle } from "lucide-react";
-import { Badge } from "./badge";
+import * as React from 'react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { AlertCircle, AlertTriangle, Check, Info } from 'lucide-react';
 
-describe("Badge", () => {
-  it("renders basic badge with default variant and size", () => {
-    render(<Badge>Default Badge</Badge>);
-    
-    const badge = screen.getByText("Default Badge");
+import { Badge } from './badge';
+
+describe('Badge', () => {
+  it('renders with the default variant, normal size, and rounded shape', () => {
+    render(<Badge>Default badge</Badge>);
+
+    const badge = screen.getByText('Default badge').closest('[data-slot="badge"]');
+
     expect(badge).toBeInTheDocument();
-    expect(badge).toHaveClass("bg-terminal-gray/10", "text-terminal-gray", "px-3", "py-1");
-  });
-
-  it("renders all size variants correctly", () => {
-    const { rerender } = render(<Badge size="sm">Small</Badge>);
-    expect(screen.getByText("Small")).toHaveClass("px-2", "py-0.5", "text-xs", "h-5");
-
-    rerender(<Badge size="md">Medium</Badge>);
-    expect(screen.getByText("Medium")).toHaveClass("px-3", "py-1", "text-xs", "h-6");
-
-    rerender(<Badge size="lg">Large</Badge>);
-    expect(screen.getByText("Large")).toHaveClass("px-4", "py-1.5", "text-sm", "h-8");
-  });
-
-  it("renders all color variants correctly", () => {
-    const variants = [
-      { variant: "default" as const, expectedClasses: ["bg-terminal-gray/10", "text-terminal-gray"] },
-      { variant: "primary" as const, expectedClasses: ["bg-terminal-green/10", "text-terminal-green"] },
-      { variant: "secondary" as const, expectedClasses: ["bg-terminal-cyan/10", "text-terminal-cyan"] },
-      { variant: "success" as const, expectedClasses: ["bg-terminal-green/10", "text-terminal-green"] },
-      { variant: "warning" as const, expectedClasses: ["bg-terminal-warning/10", "text-terminal-warning"] },
-      { variant: "danger" as const, expectedClasses: ["bg-terminal-danger/10", "text-terminal-danger"] },
-      { variant: "outline" as const, expectedClasses: ["border-current/30", "text-current", "bg-transparent"] },
-    ];
-
-    variants.forEach(({ variant, expectedClasses }) => {
-      render(<Badge variant={variant} data-testid={`badge-${variant}`}>{variant}</Badge>);
-      const badge = screen.getByTestId(`badge-${variant}`);
-      expectedClasses.forEach(className => {
-        expect(badge).toHaveClass(className);
-      });
-    });
-  });
-
-  it("renders with icon correctly", () => {
-    render(
-      <Badge icon={Check} data-testid="badge-with-icon">
-        Success
-      </Badge>
-    );
-
-    const badge = screen.getByTestId("badge-with-icon");
-    expect(badge).toBeInTheDocument();
-    
-    // Check that icon is present and has correct attributes
-    const icon = badge.querySelector("svg");
-    expect(icon).toBeInTheDocument();
-    expect(icon).toHaveAttribute("aria-hidden", "true");
-  });
-
-  it("supports custom icon size", () => {
-    render(
-      <Badge icon={AlertTriangle} iconSize={16} data-testid="custom-icon-badge">
-        Warning
-      </Badge>
-    );
-
-    const icon = screen.getByTestId("custom-icon-badge").querySelector("svg");
-    expect(icon).toHaveAttribute("width", "16");
-    expect(icon).toHaveAttribute("height", "16");
-  });
-
-  it("uses appropriate default icon sizes for each badge size", () => {
-    const { rerender } = render(
-      <Badge size="sm" icon={Check} data-testid="sm-badge">Small</Badge>
-    );
-    let icon = screen.getByTestId("sm-badge").querySelector("svg");
-    expect(icon).toHaveAttribute("width", "10");
-
-    rerender(<Badge size="md" icon={Check} data-testid="md-badge">Medium</Badge>);
-    icon = screen.getByTestId("md-badge").querySelector("svg");
-    expect(icon).toHaveAttribute("width", "12");
-
-    rerender(<Badge size="lg" icon={Check} data-testid="lg-badge">Large</Badge>);
-    icon = screen.getByTestId("lg-badge").querySelector("svg");
-    expect(icon).toHaveAttribute("width", "14");
-  });
-
-  it("forwards accessibility attributes correctly", () => {
-    render(
-      <Badge aria-label="Custom accessibility label" data-testid="accessible-badge">
-        Badge Content
-      </Badge>
-    );
-
-    const badge = screen.getByTestId("accessible-badge");
-    expect(badge).toHaveAttribute("aria-label", "Custom accessibility label");
-  });
-
-  it("forwards HTML attributes and className", () => {
-    render(
-      <Badge 
-        className="custom-class" 
-        data-custom="test-value"
-        data-testid="custom-badge"
-      >
-        Custom Badge
-      </Badge>
-    );
-
-    const badge = screen.getByTestId("custom-badge");
-    expect(badge).toHaveClass("custom-class");
-    expect(badge).toHaveAttribute("data-custom", "test-value");
-  });
-
-  it("maintains consistent structure with terminal theme classes", () => {
-    render(<Badge data-testid="theme-badge">Theme Test</Badge>);
-    
-    const badge = screen.getByTestId("theme-badge");
     expect(badge).toHaveClass(
-      "font-terminal-mono",
-      "font-semibold",
-      "tracking-wide",
-      "uppercase",
-      "rounded-full",
-      "border"
+      'border-terminal-gray/30',
+      'bg-terminal-gray/10',
+      'text-terminal-gray',
+      'h-6',
+      'px-3',
+      'py-1',
+      'rounded-full',
     );
   });
 
-  it("supports ref forwarding", () => {
-    const ref = jest.fn();
-    render(<Badge ref={ref}>Ref Test</Badge>);
-    expect(ref).toHaveBeenCalled();
+  it.each([
+    ['success', 'border-terminal-green/30', 'bg-terminal-green/10', 'text-terminal-green'],
+    ['error', 'border-terminal-danger/30', 'bg-terminal-danger/10', 'text-terminal-danger'],
+    ['warning', 'border-terminal-warning/30', 'bg-terminal-warning/10', 'text-terminal-warning'],
+    ['info', 'border-terminal-cyan/30', 'bg-terminal-cyan/10', 'text-terminal-cyan'],
+  ] as const)(
+    'renders the %s status variant',
+    (variant, borderClass, backgroundClass, textClass) => {
+      render(
+        <Badge variant={variant} data-testid={`badge-${variant}`}>
+          {variant}
+        </Badge>,
+      );
+
+      expect(screen.getByTestId(`badge-${variant}`)).toHaveClass(
+        borderClass,
+        backgroundClass,
+        textClass,
+      );
+    },
+  );
+
+  it.each([
+    ['default', 'border-terminal-gray/30', 'bg-terminal-gray/10', 'text-terminal-gray'],
+    ['primary', 'border-terminal-green/30', 'bg-terminal-green/10', 'text-terminal-green'],
+    ['secondary', 'border-terminal-cyan/30', 'bg-terminal-cyan/10', 'text-terminal-cyan'],
+    ['danger', 'border-terminal-danger/30', 'bg-terminal-danger/10', 'text-terminal-danger'],
+    ['outline', 'border-current/30', 'bg-transparent', 'text-current'],
+  ] as const)(
+    'preserves the existing %s variant',
+    (variant, borderClass, backgroundClass, textClass) => {
+      render(
+        <Badge variant={variant} data-testid={`badge-${variant}`}>
+          {variant}
+        </Badge>,
+      );
+
+      expect(screen.getByTestId(`badge-${variant}`)).toHaveClass(
+        borderClass,
+        backgroundClass,
+        textClass,
+      );
+    },
+  );
+
+  it('renders the compact size', () => {
+    render(
+      <Badge size="compact" data-testid="compact-badge">
+        Compact
+      </Badge>,
+    );
+
+    expect(screen.getByTestId('compact-badge')).toHaveClass('h-5', 'px-2', 'py-0.5', 'text-xs');
+  });
+
+  it('renders the normal size', () => {
+    render(
+      <Badge size="normal" data-testid="normal-badge">
+        Normal
+      </Badge>,
+    );
+
+    expect(screen.getByTestId('normal-badge')).toHaveClass('h-6', 'px-3', 'py-1', 'text-xs');
+  });
+
+  it.each([
+    ['sm', 'h-5', 'px-2', 'py-0.5', 'text-xs'],
+    ['md', 'h-6', 'px-3', 'py-1', 'text-xs'],
+    ['lg', 'h-8', 'px-4', 'py-1.5', 'text-sm'],
+  ] as const)(
+    'preserves the existing %s size',
+    (size, heightClass, horizontalPadding, verticalPadding, textClass) => {
+      render(
+        <Badge size={size} data-testid={`badge-${size}`}>
+          {size}
+        </Badge>,
+      );
+
+      expect(screen.getByTestId(`badge-${size}`)).toHaveClass(
+        heightClass,
+        horizontalPadding,
+        verticalPadding,
+        textClass,
+      );
+    },
+  );
+
+  it('renders the rounded shape', () => {
+    render(
+      <Badge shape="rounded" data-testid="rounded-badge">
+        Rounded
+      </Badge>,
+    );
+
+    expect(screen.getByTestId('rounded-badge')).toHaveClass('rounded-full');
+  });
+
+  it('renders the square shape', () => {
+    render(
+      <Badge shape="square" data-testid="square-badge">
+        Square
+      </Badge>,
+    );
+
+    expect(screen.getByTestId('square-badge')).toHaveClass('rounded-sm');
+
+    expect(screen.getByTestId('square-badge')).not.toHaveClass('rounded-full');
+  });
+
+  it.each([
+    ['compact', '10'],
+    ['normal', '12'],
+    ['sm', '10'],
+    ['md', '12'],
+    ['lg', '14'],
+  ] as const)('uses the correct default icon size for %s badges', (size, expectedSize) => {
+    render(
+      <Badge size={size} icon={Check} data-testid={`icon-badge-${size}`}>
+        Complete
+      </Badge>,
+    );
+
+    const icon = screen.getByTestId(`icon-badge-${size}`).querySelector('[data-slot="badge-icon"]');
+
+    expect(icon).toBeInTheDocument();
+    expect(icon).toHaveAttribute('width', expectedSize);
+    expect(icon).toHaveAttribute('height', expectedSize);
+    expect(icon).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('supports a custom icon size', () => {
+    render(
+      <Badge icon={AlertTriangle} iconSize={18} data-testid="custom-icon-badge">
+        Warning
+      </Badge>,
+    );
+
+    const icon = screen.getByTestId('custom-icon-badge').querySelector('[data-slot="badge-icon"]');
+
+    expect(icon).toHaveAttribute('width', '18');
+    expect(icon).toHaveAttribute('height', '18');
+  });
+
+  it.each([
+    ['success', Check],
+    ['error', AlertCircle],
+    ['warning', AlertTriangle],
+    ['info', Info],
+  ] as const)('renders an icon for the %s badge', (variant, Icon) => {
+    render(
+      <Badge variant={variant} icon={Icon} data-testid={`${variant}-icon-badge`}>
+        {variant}
+      </Badge>,
+    );
+
+    expect(
+      screen.getByTestId(`${variant}-icon-badge`).querySelector('[data-slot="badge-icon"]'),
+    ).toBeInTheDocument();
+  });
+
+  it('does not show a dismiss button by default', () => {
+    render(<Badge>Persistent</Badge>);
+
+    expect(
+      screen.queryByRole('button', {
+        name: 'Dismiss badge',
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows a dismiss button when dismissible is enabled', () => {
+    render(<Badge dismissible>Dismissible</Badge>);
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Dismiss badge',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('supports a custom dismiss button label', () => {
+    render(
+      <Badge dismissible dismissLabel="Remove status">
+        Removable
+      </Badge>,
+    );
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Remove status',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('dismisses the badge and calls onDismiss', async () => {
+    const user = userEvent.setup();
+    const onDismiss = jest.fn();
+
+    render(
+      <Badge dismissible onDismiss={onDismiss}>
+        Temporary badge
+      </Badge>,
+    );
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Dismiss badge',
+      }),
+    );
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Temporary badge')).not.toBeInTheDocument();
+  });
+
+  it('forwards accessibility and HTML attributes', () => {
+    render(
+      <Badge
+        aria-label="Contract status"
+        data-testid="accessible-badge"
+        data-contract-id="contract-123"
+        className="custom-badge-class"
+      >
+        Active
+      </Badge>,
+    );
+
+    const badge = screen.getByTestId('accessible-badge');
+
+    expect(badge).toHaveAttribute('aria-label', 'Contract status');
+    expect(badge).toHaveAttribute('data-contract-id', 'contract-123');
+    expect(badge).toHaveClass('custom-badge-class');
+  });
+
+  it('forwards its ref', () => {
+    const ref = React.createRef<HTMLSpanElement>();
+
+    render(<Badge ref={ref}>Referenced</Badge>);
+
+    expect(ref.current).toBeInstanceOf(HTMLSpanElement);
+    expect(ref.current).toHaveAttribute('data-slot', 'badge');
   });
 });
