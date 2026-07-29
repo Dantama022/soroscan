@@ -106,6 +106,88 @@ export default function ContractDependenciesPage() {
           {/* Keyboard shortcut hint */}
           <div className="absolute bottom-4 left-4 text-[10px] text-terminal-gray font-mono opacity-60 pointer-events-none select-none">
             Click node to inspect • Scroll to zoom • Drag to pan
+
+type SideTab = "impact" | "stack";
+
+export default function ContractDependenciesPage() {
+  const loadMockData = useDependencyGraphStore((s) => s.loadMockData);
+  const viewMode = useDependencyGraphStore((s) => s.viewMode);
+  const contracts = useDependencyGraphStore((s) => s.contracts);
+  const selectedId = useDependencyGraphStore((s) => s.selectedContractId);
+  const [sideTab, setSideTab] = useState<SideTab>("impact");
+
+  // Load mock data on mount (will be replaced by Apollo query once backend is live)
+  useEffect(() => {
+    loadMockData();
+  }, [loadMockData]);
+
+  const selectedContract = contracts.find((c) => c.id === selectedId);
+
+  return (
+    <main
+      className="min-h-screen bg-terminal-black text-terminal-white font-mono"
+      aria-label="Contract Dependency Graph"
+    >
+      {/* ── Page header ─────────────────────────────────────────────────── */}
+      <header className="border-b border-terminal-green/15 px-4 py-3 flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] text-terminal-gray tracking-[0.2em] uppercase">
+            [DEPENDENCY_GRAPH]
+          </p>
+          <h1 className="text-lg text-terminal-green font-bold leading-tight mt-0.5">
+            Contract Dependency Explorer
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Stats */}
+          <div className="hidden sm:flex items-center gap-3 text-[11px] text-terminal-gray border border-terminal-green/15 rounded px-3 py-1">
+            <span>
+              <span className="text-terminal-white">{contracts.length}</span> contracts
+            </span>
+            <span className="text-terminal-green/30">|</span>
+            <span>
+              <span className="text-terminal-danger">
+                {
+                  contracts.filter((c) =>
+                    c.vulnerabilities.some(
+                      (v) => v.severity === "CRITICAL" || v.severity === "HIGH",
+                    ),
+                  ).length
+                }
+              </span>{" "}
+              high-risk
+            </span>
+          </div>
+
+          {/* Export */}
+          <GraphExporter graphId="rf-graph-container" />
+        </div>
+      </header>
+
+      {/* ── Filter bar ──────────────────────────────────────────────────── */}
+      <GraphFilter />
+
+      {/* ── Main content: graph + side panel ───────────────────────────── */}
+      <div className="flex h-[calc(100vh-120px)] overflow-hidden">
+        {/* ── Graph / Tree panel ──────────────────────────────────────── */}
+        <section
+          className="flex-1 min-w-0 relative"
+          aria-label={viewMode === "graph" ? "Interactive dependency graph" : "Dependency tree view"}
+        >
+          {viewMode === "graph" ? (
+            <div id="rf-graph-container" className="w-full h-full">
+              <DependencyGraph graphId="rf-graph-container" />
+            </div>
+          ) : (
+            <div className="w-full h-full overflow-auto">
+              <DependencyTreeView />
+            </div>
+          )}
+
+          {/* Keyboard shortcut hint */}
+          <div className="absolute bottom-4 left-4 text-[10px] text-terminal-gray font-mono opacity-60 pointer-events-none select-none">
+            Click node to inspect • Scroll to zoom • Drag to pan
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import ContractDependencyGraph, { GraphNode, GraphEdge } from "@/components/graph/ContractDependencyGraph";

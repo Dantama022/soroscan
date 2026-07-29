@@ -133,10 +133,43 @@ export type EventEdge = {
   node: Event;
 };
 
+export type InviteResult = {
+  __typename?: 'InviteResult';
+  invitationId?: Maybe<Scalars['String']['output']>;
+  message: Scalars['String']['output'];
+  success: Scalars['Boolean']['output'];
+};
+
 export type Mutation = {
   __typename?: 'Mutation';
+  cancelInvitation: Scalars['Boolean']['output'];
+  createOrganization: Organization;
+  inviteTeamMember: InviteResult;
   login: AuthPayload;
   refreshToken: AuthPayload;
+  removeTeamMember: Scalars['Boolean']['output'];
+  resendInvitation: TeamInvitation;
+  switchOrganization: Organization;
+  updateOrganization: Organization;
+  updateTeamMemberRole: TeamMember;
+};
+
+
+export type MutationCancelInvitationArgs = {
+  invitationId: Scalars['String']['input'];
+  organizationId: Scalars['String']['input'];
+};
+
+
+export type MutationCreateOrganizationArgs = {
+  input: CreateOrganizationInput;
+};
+
+
+export type MutationInviteTeamMemberArgs = {
+  email: Scalars['String']['input'];
+  organizationId: Scalars['String']['input'];
+  role: OrgRole;
   requestGDPRDataExport: DataExportResponse;
   requestRightToBeForgotten: DeletionRequestResponse;
 };
@@ -153,12 +186,63 @@ export type MutationRefreshTokenArgs = {
 };
 
 
+export type MutationRemoveTeamMemberArgs = {
+  memberId: Scalars['String']['input'];
 export type MutationRequestGdprDataExportArgs = {
   format: Scalars['String']['input'];
   organizationId: Scalars['String']['input'];
 };
 
 
+export type MutationResendInvitationArgs = {
+  invitationId: Scalars['String']['input'];
+  organizationId: Scalars['String']['input'];
+};
+
+
+export type MutationSwitchOrganizationArgs = {
+  organizationId: Scalars['String']['input'];
+};
+
+
+export type MutationUpdateOrganizationArgs = {
+  id: Scalars['String']['input'];
+  input: UpdateOrganizationInput;
+};
+
+
+export type MutationUpdateTeamMemberRoleArgs = {
+  memberId: Scalars['String']['input'];
+  organizationId: Scalars['String']['input'];
+  role: OrgRole;
+};
+
+export type OrgActivityEntry = {
+  __typename?: 'OrgActivityEntry';
+  action: Scalars['String']['output'];
+  actorEmail: Scalars['String']['output'];
+  detail: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  targetEmail?: Maybe<Scalars['String']['output']>;
+  timestamp: Scalars['String']['output'];
+};
+
+export enum OrgRole {
+  Admin = 'admin',
+  Operator = 'operator',
+  Owner = 'owner',
+  Viewer = 'viewer'
+}
+
+export type Organization = {
+  __typename?: 'Organization';
+  billingContact: Scalars['String']['output'];
+  contractCount: Scalars['Int']['output'];
+  createdAt: Scalars['String']['output'];
+  dataRegion: DataRegion;
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  webhookLimit: Scalars['Int']['output'];
 export type MutationRequestRightToBeForgottenArgs = {
   reason?: InputMaybe<Scalars['String']['input']>;
   userId: Scalars['String']['input'];
@@ -166,10 +250,21 @@ export type MutationRequestRightToBeForgottenArgs = {
 
 export type Query = {
   __typename?: 'Query';
+  contracts: Array<ContractWithDeps>;
   events: EventConnection;
   me?: Maybe<User>;
+  myOrganizations: Array<Organization>;
+  organization?: Maybe<Organization>;
+  organizationActivity: Array<OrgActivityEntry>;
   recentErrors: Array<ErrorLog>;
   systemMetrics: SystemMetrics;
+  teamInvitations: Array<TeamInvitation>;
+  teamMembers: Array<TeamMember>;
+};
+
+
+export type QueryContractsArgs = {
+  filter?: InputMaybe<ContractFilter>;
 };
 
 
@@ -179,8 +274,28 @@ export type QueryEventsArgs = {
 };
 
 
+export type QueryOrganizationArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type QueryOrganizationActivityArgs = {
+  organizationId: Scalars['String']['input'];
+};
+
+
 export type QueryRecentErrorsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryTeamInvitationsArgs = {
+  organizationId: Scalars['String']['input'];
+};
+
+
+export type QueryTeamMembersArgs = {
+  organizationId: Scalars['String']['input'];
 };
 
 export type Subscription = {
@@ -205,11 +320,45 @@ export type SystemMetrics = {
   webhookSuccessRate: Scalars['Float']['output'];
 };
 
+export type TeamInvitation = {
+  __typename?: 'TeamInvitation';
+  email: Scalars['String']['output'];
+  expiresAt: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  invitedAt: Scalars['String']['output'];
+  role: OrgRole;
+  status: Scalars['String']['output'];
+};
+
+export type TeamMember = {
+  __typename?: 'TeamMember';
+  email: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  joinedAt: Scalars['String']['output'];
+  lastActiveAt?: Maybe<Scalars['String']['output']>;
+  role: OrgRole;
+};
+
+export type UpdateOrganizationInput = {
+  billingContact?: InputMaybe<Scalars['String']['input']>;
+  dataRegion?: InputMaybe<DataRegion>;
+  name?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type User = {
   __typename?: 'User';
+  activeOrganizationId?: Maybe<Scalars['String']['output']>;
   email: Scalars['String']['output'];
   id: Scalars['ID']['output'];
 };
+
+export enum VulnerabilitySeverity {
+  Critical = 'CRITICAL',
+  High = 'HIGH',
+  Low = 'LOW',
+  Medium = 'MEDIUM',
+  None = 'NONE'
+}
 
 export type GetSystemMetricsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -247,6 +396,13 @@ export type RefreshTokenMutationVariables = Exact<{
 
 export type RefreshTokenMutation = { __typename?: 'Mutation', refreshToken: { __typename?: 'AuthPayload', access: string, refresh: string } };
 
+export type ContractDependencyGraphQueryVariables = Exact<{
+  contractId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ContractDependencyGraphQuery = { __typename?: 'Query', contracts: Array<{ __typename?: 'ContractWithDeps', id: string, name: string, address: string, riskScore: number, reachabilityPct: number, vulnerabilities: Array<{ __typename?: 'ContractVulnerability', id: string, title: string, severity: VulnerabilitySeverity, impactedContracts: Array<string> }>, dependencies: Array<{ __typename?: 'ContractDependency', id: string, contractAddress: string, contractName: string, dependencyType: DependencyType }>, dependents: Array<{ __typename?: 'ContractDependent', id: string, contractAddress: string, contractName: string }> }> };
+
 export type OnContractEventSubscriptionVariables = Exact<{
   contractId: Scalars['String']['input'];
 }>;
@@ -261,6 +417,103 @@ export type GetEventsQueryVariables = Exact<{
 
 
 export type GetEventsQuery = { __typename?: 'Query', events: { __typename?: 'EventConnection', edges: Array<{ __typename?: 'EventEdge', node: { __typename?: 'Event', id: string, contractId: string, eventType: string, data: string, createdAt: string } }> } };
+
+export type MyOrganizationsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MyOrganizationsQuery = { __typename?: 'Query', myOrganizations: Array<{ __typename?: 'Organization', id: string, name: string, billingContact: string, dataRegion: DataRegion, createdAt: string, contractCount: number, webhookLimit: number }> };
+
+export type OrganizationDetailsQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type OrganizationDetailsQuery = { __typename?: 'Query', organization?: { __typename?: 'Organization', id: string, name: string, billingContact: string, dataRegion: DataRegion, createdAt: string, contractCount: number, webhookLimit: number } | null };
+
+export type TeamMembersQueryVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+}>;
+
+
+export type TeamMembersQuery = { __typename?: 'Query', teamMembers: Array<{ __typename?: 'TeamMember', id: string, email: string, role: OrgRole, joinedAt: string, lastActiveAt?: string | null }> };
+
+export type TeamInvitationsQueryVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+}>;
+
+
+export type TeamInvitationsQuery = { __typename?: 'Query', teamInvitations: Array<{ __typename?: 'TeamInvitation', id: string, email: string, role: OrgRole, invitedAt: string, expiresAt: string, status: string }> };
+
+export type OrganizationActivityQueryVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+}>;
+
+
+export type OrganizationActivityQuery = { __typename?: 'Query', organizationActivity: Array<{ __typename?: 'OrgActivityEntry', id: string, action: string, actorEmail: string, targetEmail?: string | null, detail: string, timestamp: string }> };
+
+export type CreateOrganizationMutationVariables = Exact<{
+  input: CreateOrganizationInput;
+}>;
+
+
+export type CreateOrganizationMutation = { __typename?: 'Mutation', createOrganization: { __typename?: 'Organization', id: string, name: string, billingContact: string, dataRegion: DataRegion, createdAt: string, contractCount: number, webhookLimit: number } };
+
+export type UpdateOrganizationMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateOrganizationInput;
+}>;
+
+
+export type UpdateOrganizationMutation = { __typename?: 'Mutation', updateOrganization: { __typename?: 'Organization', id: string, name: string, billingContact: string, dataRegion: DataRegion, createdAt: string, contractCount: number, webhookLimit: number } };
+
+export type InviteTeamMemberMutationVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+  email: Scalars['String']['input'];
+  role: OrgRole;
+}>;
+
+
+export type InviteTeamMemberMutation = { __typename?: 'Mutation', inviteTeamMember: { __typename?: 'InviteResult', success: boolean, invitationId?: string | null, message: string } };
+
+export type UpdateTeamMemberRoleMutationVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+  memberId: Scalars['String']['input'];
+  role: OrgRole;
+}>;
+
+
+export type UpdateTeamMemberRoleMutation = { __typename?: 'Mutation', updateTeamMemberRole: { __typename?: 'TeamMember', id: string, email: string, role: OrgRole, joinedAt: string, lastActiveAt?: string | null } };
+
+export type RemoveTeamMemberMutationVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+  memberId: Scalars['String']['input'];
+}>;
+
+
+export type RemoveTeamMemberMutation = { __typename?: 'Mutation', removeTeamMember: boolean };
+
+export type ResendInvitationMutationVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+  invitationId: Scalars['String']['input'];
+}>;
+
+
+export type ResendInvitationMutation = { __typename?: 'Mutation', resendInvitation: { __typename?: 'TeamInvitation', id: string, email: string, role: OrgRole, invitedAt: string, expiresAt: string, status: string } };
+
+export type CancelInvitationMutationVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+  invitationId: Scalars['String']['input'];
+}>;
+
+
+export type CancelInvitationMutation = { __typename?: 'Mutation', cancelInvitation: boolean };
+
+export type SwitchOrganizationMutationVariables = Exact<{
+  organizationId: Scalars['String']['input'];
+}>;
+
+
+export type SwitchOrganizationMutation = { __typename?: 'Mutation', switchOrganization: { __typename?: 'Organization', id: string, name: string, billingContact: string, dataRegion: DataRegion, createdAt: string, contractCount: number, webhookLimit: number } };
 
 
 export const GetSystemMetricsDocument = gql`
@@ -319,6 +572,58 @@ export type GetSystemMetricsQueryHookResult = ReturnType<typeof useGetSystemMetr
 export type GetSystemMetricsLazyQueryHookResult = ReturnType<typeof useGetSystemMetricsLazyQuery>;
 export type GetSystemMetricsSuspenseQueryHookResult = ReturnType<typeof useGetSystemMetricsSuspenseQuery>;
 export type GetSystemMetricsQueryResult = Apollo.QueryResult<GetSystemMetricsQuery, GetSystemMetricsQueryVariables>;
+export const SaveSearchPlaceholderDocument = gql`
+    query SaveSearchPlaceholder {
+  me {
+    id
+    email
+  }
+}
+    `;
+
+/**
+ * __useSaveSearchPlaceholderQuery__
+ *
+ * To run a query within a React component, call `useSaveSearchPlaceholderQuery` and pass it any options that fit your needs.
+ * When your component renders, `useSaveSearchPlaceholderQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useSaveSearchPlaceholderQuery({
+ *   variables: {
+ *   },
+ * });
+ */
+export function useSaveSearchPlaceholderQuery(baseOptions?: Apollo.QueryHookOptions<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>(SaveSearchPlaceholderDocument, options);
+      }
+export function useSaveSearchPlaceholderLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>(SaveSearchPlaceholderDocument, options);
+        }
+// @ts-ignore
+export function useSaveSearchPlaceholderSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>): Apollo.UseSuspenseQueryResult<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>;
+export function useSaveSearchPlaceholderSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>): Apollo.UseSuspenseQueryResult<SaveSearchPlaceholderQuery | undefined, SaveSearchPlaceholderQueryVariables>;
+export function useSaveSearchPlaceholderSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>(SaveSearchPlaceholderDocument, options);
+        }
+export type SaveSearchPlaceholderQueryHookResult = ReturnType<typeof useSaveSearchPlaceholderQuery>;
+export type SaveSearchPlaceholderLazyQueryHookResult = ReturnType<typeof useSaveSearchPlaceholderLazyQuery>;
+export type SaveSearchPlaceholderSuspenseQueryHookResult = ReturnType<typeof useSaveSearchPlaceholderSuspenseQuery>;
+export type SaveSearchPlaceholderQueryResult = Apollo.QueryResult<SaveSearchPlaceholderQuery, SaveSearchPlaceholderQueryVariables>;
+export const LoginDocument = gql`
+    mutation Login($email: String!, $password: String!) {
+  login(email: $email, password: $password) {
+    access
+    refresh
+    user {
+      id
+      email
+    }
 export const RequestDataGdprExportDocument = gql`
     mutation RequestDataGDPRExport($organizationId: String!, $format: String!) {
   requestGDPRDataExport(organizationId: $organizationId, format: $format) {
@@ -389,6 +694,84 @@ export function useRequestRightToBeForgottenMutation(baseOptions?: Apollo.Mutati
         const options = {...defaultOptions, ...baseOptions}
         return Apollo.useMutation<RequestRightToBeForgottenMutation, RequestRightToBeForgottenMutationVariables>(RequestRightToBeForgottenDocument, options);
       }
+export type RefreshTokenMutationHookResult = ReturnType<typeof useRefreshTokenMutation>;
+export type RefreshTokenMutationResult = Apollo.MutationResult<RefreshTokenMutation>;
+export type RefreshTokenMutationOptions = Apollo.BaseMutationOptions<RefreshTokenMutation, RefreshTokenMutationVariables>;
+export const ContractDependencyGraphDocument = gql`
+    query ContractDependencyGraph($contractId: String) {
+  contracts(filter: {}) {
+    id
+    name
+    address
+    riskScore
+    reachabilityPct
+    vulnerabilities {
+      id
+      title
+      severity
+      impactedContracts
+    }
+    dependencies {
+      id
+      contractAddress
+      contractName
+      dependencyType
+    }
+    dependents {
+      id
+      contractAddress
+      contractName
+    }
+  }
+}
+    `;
+
+/**
+ * __useContractDependencyGraphQuery__
+ *
+ * To run a query within a React component, call `useContractDependencyGraphQuery` and pass it any options that fit your needs.
+ * When your component renders, `useContractDependencyGraphQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useContractDependencyGraphQuery({
+ *   variables: {
+ *      contractId: // value for 'contractId'
+ *   },
+ * });
+ */
+export function useContractDependencyGraphQuery(baseOptions?: Apollo.QueryHookOptions<ContractDependencyGraphQuery, ContractDependencyGraphQueryVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<ContractDependencyGraphQuery, ContractDependencyGraphQueryVariables>(ContractDependencyGraphDocument, options);
+      }
+export function useContractDependencyGraphLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<ContractDependencyGraphQuery, ContractDependencyGraphQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<ContractDependencyGraphQuery, ContractDependencyGraphQueryVariables>(ContractDependencyGraphDocument, options);
+        }
+// @ts-ignore
+export function useContractDependencyGraphSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<ContractDependencyGraphQuery, ContractDependencyGraphQueryVariables>): Apollo.UseSuspenseQueryResult<ContractDependencyGraphQuery, ContractDependencyGraphQueryVariables>;
+export function useContractDependencyGraphSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<ContractDependencyGraphQuery, ContractDependencyGraphQueryVariables>): Apollo.UseSuspenseQueryResult<ContractDependencyGraphQuery | undefined, ContractDependencyGraphQueryVariables>;
+export function useContractDependencyGraphSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<ContractDependencyGraphQuery, ContractDependencyGraphQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<ContractDependencyGraphQuery, ContractDependencyGraphQueryVariables>(ContractDependencyGraphDocument, options);
+        }
+export type ContractDependencyGraphQueryHookResult = ReturnType<typeof useContractDependencyGraphQuery>;
+export type ContractDependencyGraphLazyQueryHookResult = ReturnType<typeof useContractDependencyGraphLazyQuery>;
+export type ContractDependencyGraphSuspenseQueryHookResult = ReturnType<typeof useContractDependencyGraphSuspenseQuery>;
+export type ContractDependencyGraphQueryResult = Apollo.QueryResult<ContractDependencyGraphQuery, ContractDependencyGraphQueryVariables>;
+export const OnContractEventDocument = gql`
+    subscription OnContractEvent($contractId: String!) {
+  contractEvent(contractId: $contractId) {
+    id
+    eventType
+    ledgerSequence
+    timestamp
+    payload
+  }
+}
+    `;
 export type RequestRightToBeForgottenMutationHookResult = ReturnType<typeof useRequestRightToBeForgottenMutation>;
 export type RequestRightToBeForgottenMutationResult = Apollo.MutationResult<RequestRightToBeForgottenMutation>;
 export type RequestRightToBeForgottenMutationOptions = Apollo.BaseMutationOptions<RequestRightToBeForgottenMutation, RequestRightToBeForgottenMutationVariables>;

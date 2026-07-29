@@ -8,6 +8,10 @@ type ExportFormat = "svg" | "png" | "json";
 /**
  * GraphExporter — exports the dependency graph as SVG, PNG, or JSON.
  *
+ * SVG/PNG: captures the ReactFlow canvas via the DOM.
+ * JSON: serialises the raw contract data.
+ */
+export function GraphExporter({ graphId = "dependency-graph" }: { graphId?: string }) {
  * SVG/PNG: renders a representative image via the Canvas API (no external deps).
  * JSON: serialises the raw contract data.
  */
@@ -16,6 +20,11 @@ export function GraphExporter() {
   const nodes = useDependencyGraphStore((s) => s.nodes);
   const edges = useDependencyGraphStore((s) => s.edges);
   const [exporting, setExporting] = useState<ExportFormat | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const exportJSON = useCallback(() => {
+    setExporting("json");
+    setError(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
   const exportJSON = useCallback(() => {
@@ -45,6 +54,8 @@ export function GraphExporter() {
         type: "application/json",
       });
       downloadBlob(blob, "contract-dependency-graph.json");
+    } catch (err) {
+      setError("JSON export failed.");
     } catch {
       setExportError("JSON export failed.");
     } finally {
@@ -52,6 +63,25 @@ export function GraphExporter() {
     }
   }, [contracts, edges]);
 
+  const exportSVG = useCallback(async () => {
+    setExporting("svg");
+    setError(null);
+    try {
+      const container = document.querySelector(`#${graphId} .react-flow__viewport`) as SVGElement | null;
+      if (!container) throw new Error("ReactFlow viewport not found");
+
+      // Clone the SVG-equivalent by serializing the DOM element
+      const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      const viewport = document.querySelector(`#${graphId} .react-flow__viewport`) as HTMLElement | null;
+      if (!viewport) throw new Error("Viewport not found");
+
+      const { width, height } = viewport.getBoundingClientRect();
+      svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      svgEl.setAttribute("width", String(Math.max(width, 800)));
+      svgEl.setAttribute("height", String(Math.max(height, 600)));
+      svgEl.setAttribute("viewBox", `0 0 ${Math.max(width, 800)} ${Math.max(height, 600)}`);
+
+      // Background rect
   const exportSVG = useCallback(() => {
     setExporting("svg");
     setExportError(null);
@@ -70,6 +100,29 @@ export function GraphExporter() {
       bg.setAttribute("fill", "#0a0e27");
       svgEl.appendChild(bg);
 
+      // Fallback text when canvas capture is unsupported
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", "50%");
+      text.setAttribute("y", "50%");
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("fill", "#00ff41");
+      text.setAttribute("font-family", "monospace");
+      text.setAttribute("font-size", "14");
+      text.textContent = `SoroScan Contract Graph — ${contracts.length} contracts`;
+      svgEl.appendChild(text);
+
+      // Embed node labels
+      nodes.forEach((node, idx) => {
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        const nodeText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        nodeText.setAttribute("x", String(node.position.x + 40));
+        nodeText.setAttribute("y", String(node.position.y + 50 + idx * 5));
+        nodeText.setAttribute("fill", "#00ff41");
+        nodeText.setAttribute("font-family", "monospace");
+        nodeText.setAttribute("font-size", "10");
+        nodeText.textContent = node.data.contract.name;
+        g.appendChild(nodeText);
+        svgEl.appendChild(g);
       const title = document.createElementNS("http://www.w3.org/2000/svg", "text");
       title.setAttribute("x", "40");
       title.setAttribute("y", "40");
@@ -108,6 +161,87 @@ export function GraphExporter() {
       const svgString = serializer.serializeToString(svgEl);
       const blob = new Blob([svgString], { type: "image/svg+xml" });
       downloadBlob(blob, "contract-dependency-graph.svg");
+    } catch (err) {
+      setError("SVG export failed. Try PNG instead.");
+    } finally {
+      setExporting(null);
+    }
+  }, [graphId, contracts, nodes]);
+
+  const exportPNG = useCallback(async () => {
+    setExporting("png");
+    setError(null);
+    try {
+      // Find the ReactFlow container
+      const rfEl = document.querySelector(`#${graphId}`) as HTMLElement | null;
+      if (!rfEl) throw new Error("Graph container not found");
+
+      // Dynamically import html2canvas-like approach using the canvas API
+      const { default: html2canvas } = await import("html2canvas" as string).catch(() => ({
+        default: null,
+      }));
+
+      if (html2canvas) {
+        const canvas = await (html2canvas as Function)(rfEl, {
+          backgroundColor: "#0a0e27",
+          scale: 2,
+          useCORS: true,
+          logging: false,
+        });
+        canvas.toBlob((blob: Blob | null) => {
+          if (blob) downloadBlob(blob, "contract-dependency-graph.png");
+        });
+      } else {
+        // Fallback: generate a simple PNG via canvas
+        const canvas = document.createElement("canvas");
+        canvas.width = 1200;
+        canvas.height = 800;
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "#0a0e27";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#00ff41";
+        ctx.font = "16px monospace";
+        ctx.fillText(`SoroScan Contract Dependency Graph`, 40, 60);
+        ctx.font = "12px monospace";
+        ctx.fillStyle = "#94a3b8";
+        ctx.fillText(
+          `${contracts.length} contracts · Exported ${new Date().toLocaleDateString()}`,
+          40,
+          90,
+        );
+
+        // Draw simplified node grid
+        const cols = Math.ceil(Math.sqrt(nodes.length));
+        nodes.forEach((node, idx) => {
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          const x = 80 + col * 150;
+          const y = 130 + row * 80;
+          const color = node.style?.borderColor as string ?? "#00ff41";
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(x - 30, y - 20, 60, 40);
+          ctx.fillStyle = color;
+          ctx.font = "10px monospace";
+          ctx.fillText(node.data.contract.name.slice(0, 10), x - 28, y + 5);
+        });
+
+        canvas.toBlob((blob) => {
+          if (blob) downloadBlob(blob, "contract-dependency-graph.png");
+        });
+      }
+    } catch (err) {
+      setError("PNG export failed.");
+    } finally {
+      setExporting(null);
+    }
+  }, [graphId, contracts, nodes]);
+
+  return (
+    <div className="flex items-center gap-2">
+      {error && (
+        <span className="text-terminal-danger text-[10px] font-mono" role="alert">
+          {error}
     } catch {
       setExportError("SVG export failed.");
     } finally {
