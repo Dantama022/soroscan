@@ -460,6 +460,7 @@ STELLAR_NETWORK_PASSPHRASE = env(
 )
 SOROSCAN_CONTRACT_ID = env("SOROSCAN_CONTRACT_ID", default="")
 INDEXER_SECRET_KEY = env("INDEXER_SECRET_KEY", default="")
+ADMIN_SECRET_KEY = env("ADMIN_SECRET_KEY", default=INDEXER_SECRET_KEY)
 
 # Available Soroban networks exposed via GET /api/ingest/networks/.
 # Override individual RPC URLs via the corresponding env vars if needed.

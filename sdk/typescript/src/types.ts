@@ -385,6 +385,19 @@ export interface IsIndexerResponse {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SC-9: Indexer authorization
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AddIndexerParams {
+  /** Stellar address of the indexer to authorize */
+  indexerAddress: StellarAddress;
+}
+
+export interface AddIndexerResponse {
+  status: string;
+  txHash: string | null;
+  transactionStatus: string | null;
+  error: string | null;
 // SC-30: Recent contract events
 // ─────────────────────────────────────────────────────────────────────────────
 

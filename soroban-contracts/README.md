@@ -36,6 +36,14 @@ Unit tests live in `soroscan_core/src/lib.rs` under `#[cfg(test)]` and use
 | `test_recent_events_evicts_oldest_beyond_cap` | Record more than the retention cap | Oldest entries evicted, cap enforced |
 | `test_recent_events_invalid_limit` | Query with `limit` above the cap | `ContractError::InvalidLimit` |
 
+### SC-9: Indexer authorization
+
+The `add_indexer` contract function is exposed via:
+
+- Django: `POST /api/ingest/indexers/add/`
+- Python SDK: `client.add_indexer(indexer_address)`
+- TypeScript SDK: `client.addIndexer({ indexerAddress })`
+- CLI: `soroscan indexers add <address>`
 ### SC-15: Contract authorization queries
 
 Read-only Soroban simulations for `is_indexer` and `get_admin` are exposed via:

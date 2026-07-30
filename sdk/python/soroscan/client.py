@@ -26,6 +26,8 @@ from soroscan.models import (
     PaginatedResponse,
     RecordEventRequest,
     RecordEventResponse,
+    AddIndexerRequest,
+    AddIndexerResponse,
     IsIndexerResponse,
     GetAdminResponse,
     RecordEventsBatchRequest,
@@ -443,6 +445,23 @@ class SoroScanClient:
         data = self._handle_response(response)
         return RecordEventResponse.model_validate(data)
 
+    def add_indexer(self, indexer_address: str) -> AddIndexerResponse:
+        """
+        Authorize an indexer address on the SoroScan contract (SC-9).
+
+        Args:
+            indexer_address: Stellar address of the indexer to authorize
+
+        Returns:
+            Submission result with transaction hash
+        """
+        url = urljoin(self.base_url, "/api/ingest/indexers/add/")
+        request = AddIndexerRequest(indexer_address=indexer_address)
+        response = self._client.post(
+            url, headers=self._get_headers(), json=request.model_dump()
+        )
+        data = self._handle_response(response)
+        return AddIndexerResponse.model_validate(data)
     def is_indexer(self, indexer_address: str) -> IsIndexerResponse:
         """Check whether an address is an authorized indexer (SC-15)."""
         url = urljoin(self.base_url, "/api/ingest/indexers/check/")
@@ -1013,6 +1032,23 @@ class AsyncSoroScanClient:
         data = self._handle_response(response)
         return RecordEventResponse.model_validate(data)
 
+    async def add_indexer(self, indexer_address: str) -> AddIndexerResponse:
+        """
+        Authorize an indexer address on the SoroScan contract (SC-9).
+
+        Args:
+            indexer_address: Stellar address of the indexer to authorize
+
+        Returns:
+            Submission result with transaction hash
+        """
+        url = urljoin(self.base_url, "/api/ingest/indexers/add/")
+        request = AddIndexerRequest(indexer_address=indexer_address)
+        response = await self._client.post(
+            url, headers=self._get_headers(), json=request.model_dump()
+        )
+        data = self._handle_response(response)
+        return AddIndexerResponse.model_validate(data)
     async def is_indexer(self, indexer_address: str) -> IsIndexerResponse:
         """Check whether an address is an authorized indexer (SC-15)."""
         url = urljoin(self.base_url, "/api/ingest/indexers/check/")

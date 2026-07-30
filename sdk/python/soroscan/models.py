@@ -91,6 +91,21 @@ class RecordEventResponse(BaseModel):
     error: str | None = Field(None, description="Error message if failed")
 
 
+# ── SC-9: Indexer authorization ───────────────────────────────────────────────
+
+class AddIndexerRequest(BaseModel):
+    """Request model for authorizing an indexer (SC-9)."""
+
+    indexer_address: str = Field(..., max_length=56, description="Indexer Stellar address")
+
+
+class AddIndexerResponse(BaseModel):
+    """Response from authorizing an indexer (SC-9)."""
+
+    status: str = Field(..., description="Submission status")
+    tx_hash: str | None = Field(None, description="Transaction hash")
+    transaction_status: str | None = Field(None, description="Transaction status")
+    error: str | None = Field(None, description="Error message if failed")
 # ── SC-15: Contract authorization queries ─────────────────────────────────────
 
 class IsIndexerResponse(BaseModel):

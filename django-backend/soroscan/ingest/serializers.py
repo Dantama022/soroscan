@@ -567,6 +567,12 @@ class RecordEventRequestSerializer(serializers.Serializer):
     )
 
 
+class AddIndexerRequestSerializer(serializers.Serializer):
+    """Serializer for SC-9: authorize an indexer on the SoroScan contract."""
+
+    indexer_address = serializers.CharField(
+        max_length=56,
+        help_text="Stellar address of the indexer to authorize",
 class StructuredEventRequestSerializer(RecordEventRequestSerializer):
     """SC-38 request payload for versioned, idempotent contract events."""
 

@@ -163,7 +163,7 @@ impl SoroScanCore {
         Ok(())
     }
 
-    /// Add an authorized indexer address.
+    /// Add an authorized indexer address (SC-9).
     ///
     /// # Arguments
     /// * `env` - The contract environment

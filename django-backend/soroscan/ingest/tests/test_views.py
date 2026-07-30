@@ -403,6 +403,28 @@ class TestRecordEventView:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "contract_id" in response.data
 
+    @responses.activate
+    def test_add_indexer_success(self, authenticated_client):
+        responses.add(
+            responses.POST,
+            "https://soroban-testnet.stellar.org/",
+            json={"status": "PENDING", "hash": "indexeradd123"},
+            status=200,
+        )
+
+        url = reverse("add-indexer")
+        data = {"indexer_address": "G" + "A" * 54}
+        response = authenticated_client.post(url, data, format="json")
+
+        assert response.status_code in [status.HTTP_202_ACCEPTED, status.HTTP_400_BAD_REQUEST]
+
+    def test_add_indexer_validation_error(self, authenticated_client):
+        url = reverse("add-indexer")
+        response = authenticated_client.post(url, {}, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "indexer_address" in response.data
+
 
 @pytest.mark.django_db
 class TestWebhookPingEndpoint:

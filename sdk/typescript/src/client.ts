@@ -27,6 +27,8 @@ import type {
   PaginatedResponse,
   RecordEventsBatchParams,
   RecordEventsBatchResponse,
+  AddIndexerParams,
+  AddIndexerResponse,
   GetAdminResponse,
   IsIndexerResponse,
 } from "./types.js";
@@ -392,6 +394,26 @@ export class SoroScanClient {
   /** Return the current SoroScan contract admin address (SC-15). */
   async getAdmin(): Promise<GetAdminResponse> {
     return this.#request<GetAdminResponse>("GET", "/api/ingest/contract/admin/");
+  }
+
+  /**
+   * Authorize an indexer address on the SoroScan contract (SC-9).
+   *
+   * @example
+   * const result = await client.addIndexer({
+   *   indexerAddress: 'GABC...',
+   * });
+   */
+  async addIndexer(params: AddIndexerParams): Promise<AddIndexerResponse> {
+    return this.#request<AddIndexerResponse>(
+      "POST",
+      "/api/ingest/indexers/add/",
+      {
+        body: {
+          indexer_address: params.indexerAddress,
+        },
+      }
+    );
   }
 
   /**

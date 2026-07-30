@@ -67,6 +67,7 @@ from .serializers import (
     OrganizationCorsSerializer,
     OrganizationCostSnapshotSerializer,
     RecordEventRequestSerializer,
+    AddIndexerRequestSerializer,
     StructuredEventRequestSerializer,
     TeamMemberAddSerializer,
     TeamSerializer,
@@ -1063,6 +1064,77 @@ def record_structured_event_view(request):
 
 
 @extend_schema(
+    request=AddIndexerRequestSerializer,
+    responses={
+        202: inline_serializer(
+            name="AddIndexerResponse",
+            fields={
+                "status": serializers.CharField(),
+                "tx_hash": serializers.CharField(),
+                "transaction_status": serializers.CharField(),
+            },
+        ),
+        400: inline_serializer(
+            name="AddIndexerFailed",
+            fields={
+                "status": serializers.CharField(),
+                "error": serializers.CharField(),
+                "transaction_status": serializers.CharField(),
+            },
+        ),
+    },
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([IngestRateThrottle, AnonRateThrottle, UserRateThrottle])
+def add_indexer_view(request):
+    """
+    Authorize an indexer address on the SoroScan contract (SC-9).
+
+    Request body:
+    {
+        "indexer_address": "GABC..."
+    }
+    """
+    serializer = AddIndexerRequestSerializer(data=request.data)
+
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    indexer_address = serializer.validated_data["indexer_address"]
+
+    try:
+        client = SorobanClient()
+        result = client.add_indexer(indexer_address=indexer_address)
+
+        if result.success:
+            return Response(
+                {
+                    "status": "submitted",
+                    "tx_hash": result.tx_hash,
+                    "transaction_status": result.status,
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+        return Response(
+            {
+                "status": "failed",
+                "error": result.error,
+                "transaction_status": result.status,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    except Exception as e:
+        logger.exception(
+            "Failed to add indexer",
+            extra={"indexer_address": indexer_address},
+        )
+        return Response(
+            {"status": "error", "error": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     parameters=[
         OpenApiParameter(
             name="indexer_address",
