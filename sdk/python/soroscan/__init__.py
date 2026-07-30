@@ -52,6 +52,8 @@ __all__ = [
     "TrackedContract",
     "WebhookSubscription",
     "ContractStats",
+    "GetEventsByContractsRequest",
+    "GetEventsByContractsResponse",
     "PaginatedResponse",
     "IsIndexerResponse",
     "GetAdminResponse",
