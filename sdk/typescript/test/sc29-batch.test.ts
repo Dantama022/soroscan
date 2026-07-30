@@ -29,6 +29,13 @@ const MOCK_BATCH_RESPONSE: RecordEventsBatchResponse = {
   error: null,
 };
 
+const MOCK_RECORD_RESPONSE = {
+  status: "submitted",
+  txHash: "tx001",
+  transactionStatus: "pending",
+  error: null,
+};
+
 const SAMPLE_EVENTS = [
   {
     contractId: "CCAAA111222333444555666777888999AAABBBCCCDDDEEEFFF",
@@ -99,6 +106,25 @@ describe("recordEventsBatch() — SC-29", () => {
       events: [SAMPLE_EVENTS[0]!],
     });
     expect(result.totalEvents).toBe(1);
+  });
+
+  it("posts a single event to /v1/record-event and returns response", async () => {
+    mockFetch(MOCK_RECORD_RESPONSE, 202);
+    const result = await makeClient().recordEvent({
+      contractId: SAMPLE_EVENTS[0]!.contractId,
+      eventType: SAMPLE_EVENTS[0]!.eventType,
+      payloadHash: SAMPLE_EVENTS[0]!.payloadHash,
+    });
+
+    expect(result.status).toBe("submitted");
+    expect(result.txHash).toBe("tx001");
+
+    const [url, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toContain("/v1/record-event");
+    expect(init.method).toBe("POST");
   });
 
   it("throws SoroScanError on 400 validation error", async () => {
