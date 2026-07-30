@@ -234,6 +234,7 @@ export class SoroScanClient {
 
   // ─── Contracts ─────────────────────────────────────────────────────────────
 
+
   /**
    * Retrieve a paginated list of deployed contracts.
    *
@@ -306,6 +307,76 @@ export class SoroScanClient {
   }
 
   // ─── Transactions ──────────────────────────────────────────────────────────
+
+  /**
+   * Submit an SC-38 structured event. The correlation ID makes retry handling
+   * explicit: the contract rejects a repeated ID without publishing twice.
+   */
+  async recordStructuredEvent(
+    params: RecordStructuredEventParams
+  ): Promise<RecordStructuredEventResponse> {
+    const response = await this.#request<{
+      status: "submitted" | "failed";
+      tx_hash?: string;
+      transaction_status: string;
+      error?: string;
+    }>("POST", "/api/record/structured/", {
+      body: {
+        contract_id: params.contractId,
+        event_type: params.eventType,
+        payload_hash: params.payloadHash,
+        schema_version: params.schemaVersion,
+        correlation_id: params.correlationId,
+      },
+    });
+    return {
+      status: response.status,
+      txHash: response.tx_hash,
+      transactionStatus: response.transaction_status,
+      error: response.error,
+    };
+  }
+
+  /**
+   * Submit an SC-24 tagged event.
+   *
+   * Tags are short producer-defined classification strings (e.g. `["defi",
+   * "token"]`) that allow off-chain indexers to filter events without decoding
+   * the full payload. At most 4 tags may be supplied per event.
+   *
+   * @example
+   * const result = await client.recordTaggedEvent({
+   *   contractId: 'CCAAA...',
+   *   eventType: 'transfer',
+   *   payloadHash: 'a'.repeat(64),
+   *   tags: ['defi', 'token'],
+   * });
+   */
+  async recordTaggedEvent(
+    params: RecordTaggedEventParams
+  ): Promise<RecordTaggedEventResponse> {
+    const response = await this.#request<{
+      status: "submitted" | "failed";
+      tx_hash?: string;
+      transaction_status: string;
+      error?: string;
+      tags: string[];
+    }>("POST", "/api/record/tagged/", {
+      body: {
+        contract_id: params.contractId,
+        event_type: params.eventType,
+        payload_hash: params.payloadHash,
+        tags: params.tags ?? [],
+      },
+    });
+    return {
+      status: response.status,
+      txHash: response.tx_hash,
+      transactionStatus: response.transaction_status,
+      error: response.error,
+      tags: response.tags,
+    };
+  }
 
   /**
    * Retrieve a paginated list of transactions, optionally filtered by contract

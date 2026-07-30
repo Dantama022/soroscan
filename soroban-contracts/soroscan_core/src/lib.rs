@@ -21,6 +21,35 @@ const MAX_RECENT_EVENTS_QUERY_LIMIT: u32 = MAX_RECENT_EVENTS_PER_CONTRACT;
 
 /// Represents a recorded event from an indexed contract.
 #[contracttype]
+#[derive(Clone)]
+enum DataKey {
+    StructuredByCorrelation(BytesN<32>),
+    LatestStructuredByType(Symbol),
+    /// SC-24: latest tagged event keyed by event_type
+    LatestTaggedByType(Symbol),
+}
+
+/// Maximum number of producer-defined tags per SC-24 event.
+const MAX_TAGS: u32 = 4;
+
+/// SC-24 tagged event record.  Tags are short producer-defined strings that
+/// allow off-chain indexers to filter events without decoding the full payload.
+/// Kept separate from `EventRecord` and `StructuredEventRecord` to preserve
+/// backward-compatible ABI for existing on-chain consumers.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TaggedEventRecord {
+    pub contract_id: Address,
+    pub event_type: Symbol,
+    pub payload_hash: BytesN<32>,
+    /// Producer-defined tags (max 4). Empty tags are permitted but ignored by
+    /// the indexer when building the tag index.
+    pub tags: soroban_sdk::Vec<Symbol>,
+    pub ledger: u32,
+    pub timestamp: u64,
+}
+
+#[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EventRecord {
     /// The contract that emitted the original event.
@@ -751,6 +780,83 @@ impl SoroScanCore {
     /// The admin address, or None if not initialized
     pub fn get_admin(env: Env) -> Option<Address> {
         env.storage().instance().get(&ADMIN_KEY)
+    }
+
+    /// Record an SC-24 tagged event.
+    ///
+    /// Works like `record_event` but accepts an optional list of producer-
+    /// defined tag symbols (maximum `MAX_TAGS = 4`).  The tagged record is
+    /// stored separately so the existing `record_event` / `latest_by_type`
+    /// interface is unaffected.
+    ///
+    /// # Arguments
+    /// * `env`          - The contract environment
+    /// * `indexer`      - Authorized indexer address
+    /// * `contract_id`  - Contract that emitted the original event
+    /// * `event_type`   - Event category symbol
+    /// * `payload_hash` - SHA-256 hash of the event payload (32 bytes)
+    /// * `tags`         - Up to `MAX_TAGS` producer-defined classification symbols
+    ///
+    /// # Returns
+    /// The updated global event counter, same as `record_event`.
+    pub fn record_tagged_event(
+        env: Env,
+        indexer: Address,
+        contract_id: Address,
+        event_type: Symbol,
+        payload_hash: BytesN<32>,
+        tags: soroban_sdk::Vec<Symbol>,
+    ) -> Result<u64, ContractError> {
+        indexer.require_auth();
+
+        if tags.len() > MAX_TAGS {
+            return Err(ContractError::TooManyTags);
+        }
+
+        let indexers: Map<Address, bool> = env
+            .storage()
+            .instance()
+            .get(&INDEXERS_KEY)
+            .ok_or(ContractError::NotInitialized)?;
+        if !indexers.get(indexer).unwrap_or(false) {
+            return Err(ContractError::IndexerNotFound);
+        }
+
+        let record = TaggedEventRecord {
+            contract_id,
+            event_type: event_type.clone(),
+            payload_hash,
+            tags,
+            ledger: env.ledger().sequence(),
+            timestamp: env.ledger().timestamp(),
+        };
+
+        let count = env
+            .storage()
+            .instance()
+            .get::<Symbol, u64>(&COUNTER_KEY)
+            .unwrap_or(0)
+            .saturating_add(1);
+        env.storage().instance().set(&COUNTER_KEY, &count);
+        env.storage().instance().set(
+            &DataKey::LatestTaggedByType(event_type.clone()),
+            &record,
+        );
+
+        env.events().publish(
+            (symbol_short!("soroscan"), symbol_short!("sc24"), event_type),
+            record,
+        );
+
+        Ok(count)
+    }
+
+    /// Return the latest SC-24 tagged event for the given `event_type`, or
+    /// `None` if no tagged event of that type has been recorded yet.
+    pub fn latest_tagged_by_type(env: Env, event_type: Symbol) -> Option<TaggedEventRecord> {
+        env.storage()
+            .instance()
+            .get(&DataKey::LatestTaggedByType(event_type))
     }
 }
 
