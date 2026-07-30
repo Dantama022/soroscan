@@ -314,36 +314,8 @@ impl SoroScanCore {
         // Store latest event by type
         env.storage().instance().set(&event_type, &record);
 
-        // Update per-contract event count (SC-17)
-        let mut contract_stats: Map<Address, ContractStats> = env
-            .storage()
-            .instance()
-            .get(&CONTRACT_STATS_KEY)
-            .unwrap_or(Map::new(&env));
-        let current_stats = contract_stats.get(contract_id.clone()).unwrap_or(ContractStats { event_count: 0 });
-        contract_stats.set(
-            contract_id.clone(),
-            ContractStats {
-                event_count: current_stats.event_count.saturating_add(1),
-            },
-        );
-        env.storage().instance().set(&CONTRACT_STATS_KEY, &contract_stats);
-
-        // Track unique event types per contract (SC-17)
-        let mut contract_types: Map<Address, Vec<Symbol>> = env
-            .storage()
-            .instance()
-            .get(&CONTRACT_EVENT_TYPES_KEY)
-            .unwrap_or(Map::new(&env));
-        let mut types = contract_types.get(contract_id.clone()).unwrap_or(Vec::new(&env));
-        if !types.contains(&event_type) {
-            types.push_back(event_type.clone());
-            contract_types.set(contract_id.clone(), types);
-            env.storage().instance().set(&CONTRACT_EVENT_TYPES_KEY, &contract_types);
-        }
-
-        // Track recent events per contract, bounded FIFO (SC-30)
-        push_recent_event(&env, contract_id, record.clone());
+        // Store latest event by contract (SC-16)
+        env.storage().instance().set(&contract_id, &record);
 
         // Publish the event for off-chain indexers
         env.events()
@@ -435,6 +407,18 @@ impl SoroScanCore {
     /// The latest EventRecord for the type, or None if not found
     pub fn latest_by_type(env: Env, event_type: Symbol) -> Option<EventRecord> {
         env.storage().instance().get(&event_type)
+    }
+
+    /// Get the latest event record for a specific contract (SC-16).
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `contract_id` - The contract address to query
+    ///
+    /// # Returns
+    /// The latest EventRecord for the contract, or None if not found
+    pub fn latest_by_contract(env: Env, contract_id: Address) -> Option<EventRecord> {
+        env.storage().instance().get(&contract_id)
     }
 
     /// Get the total number of events recorded.
@@ -605,24 +589,8 @@ impl SoroScanCore {
             count = count.saturating_add(1);
             env.storage().instance().set(&entry.event_type, &record);
 
-            // Update per-contract event count (SC-17)
-            let current_stats = contract_stats.get(entry.contract_id.clone()).unwrap_or(ContractStats { event_count: 0 });
-            contract_stats.set(
-                entry.contract_id.clone(),
-                ContractStats {
-                    event_count: current_stats.event_count.saturating_add(1),
-                },
-            );
-
-            // Track unique event types per contract (SC-17)
-            let mut types = contract_types.get(entry.contract_id.clone()).unwrap_or(Vec::new(&env));
-            if !types.contains(&entry.event_type) {
-                types.push_back(entry.event_type.clone());
-                contract_types.set(entry.contract_id.clone(), types);
-            }
-
-            // Track recent events per contract, bounded FIFO (SC-30)
-            push_recent_event(&env, entry.contract_id.clone(), record.clone());
+            // Store latest event by contract (SC-16)
+            env.storage().instance().set(&entry.contract_id, &record);
 
             env.events().publish(
                 (symbol_short!("soroscan"), entry.event_type.clone()),

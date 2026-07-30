@@ -14,7 +14,6 @@ from pydantic import BaseModel
 from soroscan.client import SoroScanClient
 from soroscan.exceptions import SoroScanError
 
-
 DEFAULT_BASE_URL = "https://api.soroscan.io"
 
 
@@ -104,25 +103,28 @@ def _handle_contracts(args: argparse.Namespace) -> int:
                 )
             return 0
 
-        if args.contract_command == "event-types":
-            types = client.get_contract_event_types(args.contract_id)
-            if args.output == "json":
-                _print_json(types)
-            else:
-                _print_table(
-                    types,
-                    ["event_type", "count", "first_seen", "last_seen"],
-                )
-            return 0
-
-        if args.contract_command == "recent-events":
-            events = client.get_contract_recent_events(args.contract_id, limit=args.limit)
+        if args.contract_command == "events":
+            events = client.get_contract_events(args.contract_id, limit=args.limit)
             if args.output == "json":
                 _print_json(events)
             else:
                 _print_table(
                     events,
                     ["id", "event_type", "ledger", "event_index", "timestamp"],
+                )
+            return 0
+
+        if args.contract_command == "health":
+            health = client.get_contract_health(args.contract_id)
+            if args.output == "json":
+                _print_json(health)
+            else:
+                _print_table(
+                    [health],
+                    [
+                        "contract_id", "status", "minutes_since_last_event",
+                        "consecutive_failures", "checked_at",
+                    ],
                 )
             return 0
 
@@ -237,39 +239,19 @@ def build_parser() -> argparse.ArgumentParser:
     contracts_get.add_argument("contract_id")
     contracts_get.add_argument("--output", choices=["table", "json"], default="table")
     contracts_get.set_defaults(func=_handle_contracts)
-    contracts_event_types = contract_subcommands.add_parser(
-        "event-types", help="Get event types for a contract (SC-17)"
+    contracts_events = contract_subcommands.add_parser(
+        "events", help="Get recent events for a contract (SC-16)"
     )
-    contracts_event_types.add_argument("contract_id", help="Contract address (C...)")
-    contracts_event_types.add_argument(
-        "--output", choices=["table", "json"], default="table"
+    contracts_events.add_argument("contract_id", help="Contract address (C...)")
+    contracts_events.add_argument("--limit", type=int, default=100, help="Max events")
+    contracts_events.add_argument("--output", choices=["table", "json"], default="table")
+    contracts_events.set_defaults(func=_handle_contracts)
+    contracts_health = contract_subcommands.add_parser(
+        "health", help="Get health status for a contract (SC-16)"
     )
-    contracts_event_types.set_defaults(func=_handle_contracts)
-    contracts_recent_events = contract_subcommands.add_parser(
-        "recent-events", help="Get the most recent events for a contract (SC-30)"
-    )
-    contracts_recent_events.add_argument("contract_id", help="Contract address (C...)")
-    contracts_recent_events.add_argument(
-        "--limit", type=int, default=10, help="Maximum events to return (1-20, default 10)"
-    )
-    contracts_recent_events.add_argument(
-        "--output", choices=["table", "json"], default="table"
-    )
-    contracts_recent_events.set_defaults(func=_handle_contracts)
-
-    # SC-10: record a single event from the CLI
-    record = subcommands.add_parser(
-        "record-event",
-        help="Submit a single event to the SoroScan indexing contract",
-    )
-    record.add_argument("contract_id", help="Target contract address (C...)")
-    record.add_argument("event_type", help="Event type name (e.g. transfer, swap)")
-    record.add_argument(
-        "payload_hash",
-        help="SHA-256 hex hash of the event payload (64 hex chars)",
-    )
-    record.add_argument("--output", choices=["table", "json"], default="table")
-    record.set_defaults(func=_handle_record_event)
+    contracts_health.add_argument("contract_id", help="Contract address (C...)")
+    contracts_health.add_argument("--output", choices=["table", "json"], default="table")
+    contracts_health.set_defaults(func=_handle_contracts)
 
     indexers = subcommands.add_parser("indexers", help="Manage Soroban contract indexers (SC-9)")
     indexer_subcommands = indexers.add_subparsers(dest="indexer_command", required=True)

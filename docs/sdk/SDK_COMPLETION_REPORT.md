@@ -103,13 +103,15 @@ The SoroScan Python SDK has been successfully implemented according to all speci
 
 ## API Coverage
 
-### Contracts API (6/6 methods)
+### Contracts API (8/8 methods)
 - ✅ `get_contracts()` - List with filtering
 - ✅ `get_contract()` - Get by ID
 - ✅ `create_contract()` - Register new
 - ✅ `update_contract()` - Update existing
 - ✅ `delete_contract()` - Remove
 - ✅ `get_contract_stats()` - Statistics
+- ✅ `get_contract_events()` (SC-16) - Recent events by contract
+- ✅ `get_contract_health()` (SC-16) - Health status
 
 ### Events API (3/3 methods)
 - ✅ `get_events()` - Query with filtering
@@ -124,7 +126,7 @@ The SoroScan Python SDK has been successfully implemented according to all speci
 - ✅ `delete_webhook()` - Remove
 - ✅ `test_webhook()` - Send test
 
-**Total: 15/15 endpoints covered (100%)**
+**Total: 17/17 endpoints covered (100%)**
 
 ## Code Quality Metrics
 
@@ -150,7 +152,7 @@ The SoroScan Python SDK has been successfully implemented according to all speci
 ### Documentation
 - **README length**: 200+ lines
 - **Example scripts**: 4
-- **API methods documented**: 15/15
+- **API methods documented**: 17/17
 - **Docstrings**: All public APIs
 
 ## Dependencies

@@ -1,9 +1,7 @@
 import type {
   SoroScanClientConfig,
   SoroScanApiError,
-  ContractEvent,
-  ContractEventTypeInfo,
-  GetContractRecentEventsParams,
+  ContractHealth,
   GetEventsParams,
   GetEventsResponse,
   GetEventsByContractsParams,
@@ -264,45 +262,37 @@ export class SoroScanClient {
   }
 
   /**
-   * Get event types and their counts for a specific contract (SC-17).
+   * Get recent events for a specific contract (SC-16).
    *
    * @example
-   * const types = await client.getContractEventTypes('CCAAA...');
-   * for (const t of types) {
-   *   console.log(t.eventType, t.count);
+   * const events = await client.getContractEvents('CCAAA...', 20);
+   * for (const event of events) {
+   *   console.log(event.event_type, event.timestamp);
    * }
    */
-  async getContractEventTypes(
-    contractId: string
-  ): Promise<ContractEventTypeInfo[]> {
-    return this.#request<ContractEventTypeInfo[]>(
+  async getContractEvents(
+    contractId: string,
+    limit: number = 100
+  ): Promise<import("./types.js").ContractEvent[]> {
+    return this.#request<import("./types.js").ContractEvent[]>(
       "GET",
-      `/v1/contracts/${encodeURIComponent(contractId)}/event-types`
+      `/v1/contracts/${encodeURIComponent(contractId)}/events`,
+      { query: { limit } }
     );
   }
 
   /**
-   * Get the most recent events for a specific contract, newest first (SC-30).
+   * Get health status for a tracked contract (SC-16).
    *
    * @example
-   * const events = await client.getContractRecentEvents({
-   *   contractId: 'CCAAA...',
-   *   limit: 5,
-   * });
+   * const health = await client.getContractHealth('CCAAA...');
+   * console.log('Status:', health.status);
+   * console.log('Consecutive failures:', health.consecutiveFailures);
    */
-  async getContractRecentEvents(
-    params: GetContractRecentEventsParams
-  ): Promise<ContractEvent[]> {
-    const { contractId, limit = 10 } = params;
-    if (limit < 1 || limit > MAX_RECENT_EVENTS_LIMIT) {
-      throw new Error(
-        `getContractRecentEvents: limit must be between 1 and ${MAX_RECENT_EVENTS_LIMIT}`
-      );
-    }
-    return this.#request<ContractEvent[]>(
+  async getContractHealth(contractId: string): Promise<ContractHealth> {
+    return this.#request<ContractHealth>(
       "GET",
-      `/v1/contracts/${encodeURIComponent(contractId)}/recent-events`,
-      { query: { limit } }
+      `/v1/contracts/${encodeURIComponent(contractId)}/health`
     );
   }
 

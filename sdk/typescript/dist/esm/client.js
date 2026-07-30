@@ -148,6 +148,29 @@ export class SoroScanClient {
         const { contractId } = params;
         return this.#request("GET", `/v1/contracts/${encodeURIComponent(contractId)}`);
     }
+    /**
+     * Get recent events for a specific contract (SC-16).
+     *
+     * @example
+     * const events = await client.getContractEvents('CCAAA...', 20);
+     * for (const event of events) {
+     *   console.log(event.event_type, event.timestamp);
+     * }
+     */
+    async getContractEvents(contractId, limit = 100) {
+        return this.#request("GET", `/v1/contracts/${encodeURIComponent(contractId)}/events`, { query: { limit } });
+    }
+    /**
+     * Get health status for a tracked contract (SC-16).
+     *
+     * @example
+     * const health = await client.getContractHealth('CCAAA...');
+     * console.log('Status:', health.status);
+     * console.log('Consecutive failures:', health.consecutiveFailures);
+     */
+    async getContractHealth(contractId) {
+        return this.#request("GET", `/v1/contracts/${encodeURIComponent(contractId)}/health`);
+    }
     // ─── Transactions ──────────────────────────────────────────────────────────
     /**
      * Retrieve a paginated list of transactions, optionally filtered by contract
@@ -188,6 +211,22 @@ export class SoroScanClient {
         return this.#request("GET", `/v1/accounts/${encodeURIComponent(accountId)}`);
     }
     // ─── Webhooks ──────────────────────────────────────────────────────────────
+    /**
+     * Record multiple events in a single transaction (SC-29).
+     * Maximum 25 events per batch.
+     *
+     * @example
+     * const result = await client.recordEventsBatch({
+     *   events: [
+     *     { contractId: 'CCAAA...', eventType: 'transfer', payloadHash: 'abc...' },
+     *     { contractId: 'CCAAA...', eventType: 'swap', payloadHash: 'def...' },
+     *   ],
+     * });
+     * console.log('Total events:', result.totalEvents);
+     */
+    async recordEventsBatch(params) {
+        return this.#request("POST", "/v1/record-events-batch", { body: params });
+    }
     /**
      * Create a new webhook subscription.
      *

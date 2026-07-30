@@ -1,4 +1,4 @@
-import type { SoroScanClientConfig, SoroScanApiError, GetEventsParams, GetEventsResponse, GetEventsByContractsParams, GetEventsByContractsResponse, RecordStructuredEventParams, RecordStructuredEventResponse, GetContractsParams, GetContractsResponse, GetContractParams, Contract, GetTransactionsParams, GetTransactionsResponse, GetLedgersParams, GetLedgersResponse, GetAccountParams, Account, SubscribeWebhookParams, UpdateWebhookParams, Webhook, WebhookListResponse, PaginatedResponse } from "./types.js";
+import type { SoroScanClientConfig, SoroScanApiError, ContractHealth, GetEventsParams, GetEventsResponse, GetContractsParams, GetContractsResponse, GetContractParams, Contract, GetTransactionsParams, GetTransactionsResponse, GetLedgersParams, GetLedgersResponse, GetAccountParams, Account, SubscribeWebhookParams, UpdateWebhookParams, Webhook, WebhookListResponse, PaginatedResponse, RecordEventsBatchParams, RecordEventsBatchResponse } from "./types.js";
 export declare class SoroScanError extends Error {
     readonly statusCode: number;
     readonly code: string;
@@ -38,6 +38,25 @@ export declare class SoroScanClient {
      */
     getContract(params: GetContractParams): Promise<Contract>;
     /**
+     * Get recent events for a specific contract (SC-16).
+     *
+     * @example
+     * const events = await client.getContractEvents('CCAAA...', 20);
+     * for (const event of events) {
+     *   console.log(event.event_type, event.timestamp);
+     * }
+     */
+    getContractEvents(contractId: string, limit?: number): Promise<import("./types.js").ContractEvent[]>;
+    /**
+     * Get health status for a tracked contract (SC-16).
+     *
+     * @example
+     * const health = await client.getContractHealth('CCAAA...');
+     * console.log('Status:', health.status);
+     * console.log('Consecutive failures:', health.consecutiveFailures);
+     */
+    getContractHealth(contractId: string): Promise<ContractHealth>;
+    /**
      * Retrieve a paginated list of transactions, optionally filtered by contract
      * or account.
      */
@@ -58,6 +77,20 @@ export declare class SoroScanClient {
      * Retrieve account details including balances and contract interaction count.
      */
     getAccount(params: GetAccountParams): Promise<Account>;
+    /**
+     * Record multiple events in a single transaction (SC-29).
+     * Maximum 25 events per batch.
+     *
+     * @example
+     * const result = await client.recordEventsBatch({
+     *   events: [
+     *     { contractId: 'CCAAA...', eventType: 'transfer', payloadHash: 'abc...' },
+     *     { contractId: 'CCAAA...', eventType: 'swap', payloadHash: 'def...' },
+     *   ],
+     * });
+     * console.log('Total events:', result.totalEvents);
+     */
+    recordEventsBatch(params: RecordEventsBatchParams): Promise<RecordEventsBatchResponse>;
     /**
      * Create a new webhook subscription.
      *

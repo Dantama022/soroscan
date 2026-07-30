@@ -236,6 +236,44 @@ export interface WebhookListResponse {
     items: Webhook[];
     totalCount: number;
 }
+export interface ContractHealth {
+    /** Contract address */
+    contractId: string;
+    /** Health status (healthy/unhealthy) */
+    status: string;
+    /** Timestamp of last event */
+    lastEventTime: string | null;
+    /** Minutes since last event */
+    minutesSinceLastEvent: number | null;
+    /** ABI decode errors in last hour */
+    abiDecodeErrors1h: number;
+    /** Consecutive indexing failures */
+    consecutiveFailures: number;
+    /** Error message if unhealthy */
+    errorMessage: string;
+    /** When health was last checked */
+    checkedAt: string | null;
+}
+export interface EventEntry {
+    /** Target contract address */
+    contractId: ContractId;
+    /** Event type name (e.g. "transfer", "swap") */
+    eventType: EventType;
+    /** SHA-256 hash of the event payload (hex) */
+    payloadHash: string;
+}
+export interface RecordEventsBatchParams {
+    /** 1–25 event entries to record in a single transaction */
+    events: EventEntry[];
+}
+export interface RecordEventsBatchResponse {
+    status: string;
+    /** New total event count after the batch */
+    totalEvents: number;
+    txHash: string | null;
+    transactionStatus: string | null;
+    error: string | null;
+}
 export interface SoroScanApiError {
     code: string;
     message: string;

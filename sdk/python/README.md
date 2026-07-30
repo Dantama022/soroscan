@@ -32,6 +32,8 @@ soroscan webhooks list
 soroscan webhooks test 1
 soroscan contracts list --search token
 soroscan contracts get 1 --output json
+soroscan contracts events CCAAA... --limit 20
+soroscan contracts health CCAAA... --output json
 ```
 
 ### Synchronous Client
@@ -166,6 +168,21 @@ client.delete_contract(contract_id: str) -> None
 client.get_contract_stats(contract_id: str) -> ContractStats
 ```
 
+#### Get Contract Events (SC-16)
+```python
+client.get_contract_events(
+    contract_id: str,
+    limit: int = 100
+) -> list[ContractEvent]
+```
+
+#### Get Contract Health (SC-16)
+```python
+client.get_contract_health(
+    contract_id: str
+) -> ContractHealth
+```
+
 ### Events
 
 #### Query Events Across Contracts (SC-23)
@@ -266,6 +283,7 @@ All response models are Pydantic v2 models with full type safety:
 
 - `TrackedContract`: Registered contract details
 - `ContractEvent`: Indexed event data
+- `ContractHealth` (SC-16): Health status of a tracked contract
 - `WebhookSubscription`: Webhook configuration
 - `ContractStats`: Aggregate statistics
 - `PaginatedResponse[T]`: Generic paginated wrapper

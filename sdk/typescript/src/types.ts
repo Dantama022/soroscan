@@ -383,18 +383,26 @@ export interface WebhookListResponse {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SC-17: Contract event type info
+// SC-16: Contract health
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface ContractEventTypeInfo {
-  /** Event type name */
-  eventType: string;
-  /** Number of events of this type */
-  count: number;
-  /** ISO timestamp of first occurrence */
-  firstSeen: string;
-  /** ISO timestamp of last occurrence */
-  lastSeen: string;
+export interface ContractHealth {
+  /** Contract address */
+  contractId: string;
+  /** Health status (healthy/unhealthy) */
+  status: string;
+  /** Timestamp of last event */
+  lastEventTime: string | null;
+  /** Minutes since last event */
+  minutesSinceLastEvent: number | null;
+  /** ABI decode errors in last hour */
+  abiDecodeErrors1h: number;
+  /** Consecutive indexing failures */
+  consecutiveFailures: number;
+  /** Error message if unhealthy */
+  errorMessage: string;
+  /** When health was last checked */
+  checkedAt: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
