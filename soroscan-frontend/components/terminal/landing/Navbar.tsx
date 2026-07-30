@@ -3,25 +3,28 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Button } from "../Button"
 import { LogOut } from "lucide-react"
 import { isLoggedIn, clearTokens } from "@/lib/auth"
 import { useRouter } from "next/navigation"
 import { HamburgerToggle } from "@/components/ui/hamburger-toggle"
+import { LanguageSelector } from "@/components/ui/LanguageSelector"
 import { NavDrawer } from "./NavDrawer"
-
-const navLinks = [
-  { href: "/docs",      label: "DOCS" },
-  { href: "/features",  label: "FEATURES" },
-  { href: "/api/docs/", label: "API_DOCS", external: true },
-  { href: "https://github.com/SoroScan/soroscan", label: "GITHUB", external: true },
-]
 
 export function Navbar() {
   const [open, setOpen] = React.useState(false)
   const [authenticated, setAuthenticated] = React.useState(false)
   const pathname = usePathname()
   const router = useRouter()
+  const t = useTranslations("Navigation")
+
+  const navLinks = [
+    { href: "/docs", label: t("docs") },
+    { href: "/features", label: t("features") },
+    { href: "/api/docs/", label: "API_DOCS", external: true },
+    { href: "https://github.com/SoroScan/soroscan", label: "GITHUB", external: true },
+  ]
 
   React.useEffect(() => {
     setAuthenticated(isLoggedIn())
@@ -72,22 +75,24 @@ export function Navbar() {
         </div>
 
           <div className="hidden md:flex items-center gap-3">
+            <LanguageSelector />
+
             {authenticated ? (
-              <Button 
-                size="sm" 
-                variant="secondary" 
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={handleLogout}
                 className="group"
               >
                 <LogOut size={14} className="mr-2 group-hover:text-terminal-danger transition-colors" />
-                LOGOUT
+                {t("logout")}
               </Button>
             ) : (
               <Link href="/login">
-                <Button size="sm" variant="secondary">SIGN_IN</Button>
+                <Button size="sm" variant="secondary">{t("login")}</Button>
               </Link>
             )}
-            
+
             <a
               href="/api/docs/"
               target="_blank"
