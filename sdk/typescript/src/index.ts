@@ -69,3 +69,5 @@ export type {
   // Errors
   SoroScanApiError,
 } from "./types.js";
+
+export * from "./features/sc20";

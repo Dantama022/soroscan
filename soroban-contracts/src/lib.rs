@@ -40,6 +40,8 @@
 #![no_std]
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, symbol_short, Env, String, Symbol};
 
+pub mod features;
+
 /// Standardized event kinds. Keeping this as an enum (rather than raw
 /// symbols scattered through the contract) is the core of the SDK-facing
 /// improvement: SDK client code can match on `EventKind` instead of
