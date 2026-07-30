@@ -419,6 +419,7 @@ impl SoroScanCore {
         env.storage().instance().get(&COUNTER_KEY).unwrap_or(0)
     }
 
+    /// Check if an address is an authorized indexer (SC-15).
     /// Get the total event count for a specific contract (SC-17).
     ///
     /// # Arguments
@@ -741,7 +742,7 @@ impl SoroScanCore {
         Ok(())
     }
 
-    /// Get the admin address.
+    /// Get the admin address (SC-15).
     ///
     /// # Arguments
     /// * `env` - The contract environment
