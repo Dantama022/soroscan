@@ -62,6 +62,8 @@ export type {
   EventEntry,
   RecordEventsBatchParams,
   RecordEventsBatchResponse,
+  // SC-28: Contract pause status
+  ContractStatus,
   // SC-30: Recent contract events
   GetContractRecentEventsParams,
   // WebSocket

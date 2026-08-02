@@ -173,6 +173,14 @@ class RecordEventsBatchResponse(BaseModel):
     error: str | None = Field(None, description="Error message if failed")
 
 
+# ── SC-28: Contract pause status ──────────────────────────────────────────────
+
+class ContractStatus(BaseModel):
+    """Contract pause/health status (SC-28)."""
+
+    paused: bool = Field(..., description="Whether event recording is currently paused")
+    admin: str = Field(..., description="Current admin address")
+    total_events: int = Field(..., description="Total events recorded so far")
 # ── SC-16: Contract health ─────────────────────────────────────────────────────
 
 class ContractHealth(BaseModel):
