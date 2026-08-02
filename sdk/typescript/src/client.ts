@@ -25,6 +25,7 @@ import type {
   PaginatedResponse,
   RecordEventsBatchParams,
   RecordEventsBatchResponse,
+  IndexerStats,
   ContractStatus,
   AddIndexerParams,
   AddIndexerResponse,
@@ -479,6 +480,14 @@ export class SoroScanClient {
   }
 
   /**
+   * Get event recording statistics for a specific indexer (SC-13).
+   *
+   * @example
+   * const stats = await client.getIndexerStats('GABC...');
+   * console.log('Events recorded:', stats.eventsRecorded);
+   */
+  async getIndexerStats(indexer: string): Promise<IndexerStats> {
+    return this.#request<IndexerStats>("GET", `/v1/indexer-stats/${indexer}`);
    * Get the contract's current pause/health status (SC-28).
    *
    * @example

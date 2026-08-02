@@ -511,6 +511,14 @@ export interface EventFilter {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SC-13: Per-indexer event statistics
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface IndexerStats {
+  /** The indexer's Stellar address */
+  indexer: string;
+  /** Total events recorded by this indexer */
+  eventsRecorded: number;
 // SC-28: Contract pause status
 // ─────────────────────────────────────────────────────────────────────────────
 

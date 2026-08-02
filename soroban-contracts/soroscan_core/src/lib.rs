@@ -8,6 +8,7 @@ use soroban_sdk::{
 const ADMIN_KEY: Symbol = symbol_short!("admin");
 const INDEXERS_KEY: Symbol = symbol_short!("idxrs");
 const COUNTER_KEY: Symbol = symbol_short!("count");
+const INDEXER_COUNTS_KEY: Symbol = symbol_short!("idxcnt");
 const PAUSED_KEY: Symbol = symbol_short!("paused");
 const CONTRACT_STATS_KEY: Symbol = symbol_short!("cstats");
 const CONTRACT_EVENT_TYPES_KEY: Symbol = symbol_short!("etypes");
@@ -297,6 +298,9 @@ impl SoroScanCore {
             .get(&INDEXERS_KEY)
             .ok_or(ContractError::NotInitialized)?;
 
+        let is_allowed = indexers.get(indexer.clone()).unwrap_or(false);
+        if !is_allowed {
+            return Err(ContractError::IndexerNotFound);
         match indexers.get(indexer) {
             Some(IndexerStatus::Active) => {}
             Some(IndexerStatus::Paused) => return Err(ContractError::IndexerPaused),
@@ -391,6 +395,8 @@ impl SoroScanCore {
             (symbol_short!("soroscan"), symbol_short!("sc38"), event_type),
             record,
         );
+
+        Self::bump_indexer_count(&env, &indexer, 1);
 
         Ok(count)
     }
@@ -535,6 +541,22 @@ impl SoroScanCore {
         }
     }
 
+    /// Get the number of events recorded by a specific indexer.
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `indexer` - The indexer address to query
+    ///
+    /// # Returns
+    /// The total event count recorded by this indexer (0 if none)
+    pub fn events_recorded_by(env: Env, indexer: Address) -> u64 {
+        let counts: Option<Map<Address, u64>> = env.storage().instance().get(&INDEXER_COUNTS_KEY);
+        match counts {
+            Some(map) => map.get(indexer).unwrap_or(0),
+            None => 0,
+        }
+    }
+
     /// Record multiple events in a single transaction (SC-29).
     /// Only authorized indexers can call this function.
     /// Maximum batch size is 25 events.
@@ -613,6 +635,8 @@ impl SoroScanCore {
         env.storage().instance().set(&COUNTER_KEY, &count);
         env.storage().instance().set(&CONTRACT_STATS_KEY, &contract_stats);
         env.storage().instance().set(&CONTRACT_EVENT_TYPES_KEY, &contract_types);
+
+        Self::bump_indexer_count(&env, &indexer, batch_len as u64);
 
         // Emit a single batch summary event
         env.events().publish(
@@ -762,6 +786,16 @@ impl SoroScanCore {
         env.storage().instance().get(&ADMIN_KEY)
     }
 
+    /// Increment the recorded-event counter for a single indexer (SC-13).
+    fn bump_indexer_count(env: &Env, indexer: &Address, by: u64) {
+        let mut counts: Map<Address, u64> = env
+            .storage()
+            .instance()
+            .get(&INDEXER_COUNTS_KEY)
+            .unwrap_or_else(|| Map::new(env));
+        let current = counts.get(indexer.clone()).unwrap_or(0);
+        counts.set(indexer.clone(), current.saturating_add(by));
+        env.storage().instance().set(&INDEXER_COUNTS_KEY, &counts);
     /// Pause event recording (SC-28).
     /// While paused, `record_event` and `record_events_batch` are disabled.
     ///
@@ -1504,6 +1538,7 @@ mod tests {
     }
 
     #[test]
+    fn test_events_recorded_by_tracks_single_indexer() {
     fn test_pause_blocks_record_event() {
     // ── SC-10: pause/resume indexer ─────────────────────────────────────────
 
@@ -1515,6 +1550,42 @@ mod tests {
         let (client, admin, indexer) = setup_contract(&env);
         client.add_indexer(&admin, &indexer);
 
+        assert_eq!(client.events_recorded_by(&indexer), 0);
+
+        let target = Address::generate(&env);
+        let payload_hash = BytesN::from_array(&env, &[0u8; 32]);
+
+        client.record_event(&indexer, &target, &symbol_short!("swap"), &payload_hash);
+        assert_eq!(client.events_recorded_by(&indexer), 1);
+
+        client.record_event(&indexer, &target, &symbol_short!("transfer"), &payload_hash);
+        client.record_event(&indexer, &target, &symbol_short!("mint"), &payload_hash);
+        assert_eq!(client.events_recorded_by(&indexer), 3);
+    }
+
+    #[test]
+    fn test_events_recorded_by_tracks_separate_indexers_independently() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (client, admin, indexer_a) = setup_contract(&env);
+        let indexer_b = Address::generate(&env);
+        let target = Address::generate(&env);
+        let payload_hash = BytesN::from_array(&env, &[0u8; 32]);
+
+        client.add_indexer(&admin, &indexer_a);
+        client.add_indexer(&admin, &indexer_b);
+
+        client.record_event(&indexer_a, &target, &symbol_short!("swap"), &payload_hash);
+        client.record_event(&indexer_a, &target, &symbol_short!("swap"), &payload_hash);
+        client.record_event(&indexer_b, &target, &symbol_short!("swap"), &payload_hash);
+
+        assert_eq!(client.events_recorded_by(&indexer_a), 2);
+        assert_eq!(client.events_recorded_by(&indexer_b), 1);
+    }
+
+    #[test]
+    fn test_events_recorded_by_batch_increments_by_batch_length() {
         // Initially active
         assert_eq!(client.get_indexer_status(&indexer), Some(IndexerStatus::Active));
         assert!(client.is_indexer(&indexer));
@@ -1687,6 +1758,29 @@ mod tests {
         env.mock_all_auths();
 
         let (client, admin, indexer) = setup_contract(&env);
+        client.add_indexer(&admin, &indexer);
+
+        let mut entries = Vec::new(&env);
+        for _ in 0..5 {
+            entries.push_back(EventEntry {
+                contract_id: Address::generate(&env),
+                event_type: symbol_short!("ev"),
+                payload_hash: BytesN::from_array(&env, &[0u8; 32]),
+            });
+        }
+
+        client.record_events_batch(&indexer, &entries);
+        assert_eq!(client.events_recorded_by(&indexer), 5);
+
+        // A subsequent single record_event should add on top of the batch count.
+        let target = Address::generate(&env);
+        let payload_hash = BytesN::from_array(&env, &[0u8; 32]);
+        client.record_event(&indexer, &target, &symbol_short!("swap"), &payload_hash);
+        assert_eq!(client.events_recorded_by(&indexer), 6);
+    }
+
+    #[test]
+    fn test_events_recorded_by_unknown_indexer_returns_zero() {
         let target = Address::generate(&env);
 
         client.add_indexer(&admin, &indexer);
@@ -1749,6 +1843,17 @@ mod tests {
         env.mock_all_auths();
 
         let (client, admin, indexer) = setup_contract(&env);
+        let stranger = Address::generate(&env);
+
+        assert_eq!(client.events_recorded_by(&stranger), 0);
+
+        client.add_indexer(&admin, &indexer);
+        let target = Address::generate(&env);
+        let payload_hash = BytesN::from_array(&env, &[0u8; 32]);
+        client.record_event(&indexer, &target, &symbol_short!("swap"), &payload_hash);
+
+        // Other indexers recording events must not affect an untouched address.
+        assert_eq!(client.events_recorded_by(&stranger), 0);
         let target = Address::generate(&env);
 
         client.add_indexer(&admin, &indexer);
