@@ -5,6 +5,13 @@ jest.mock("next/navigation", () => ({
   usePathname: () => "/dashboard",
 }));
 
+// The notification center talks to Apollo — stub the data layer so the shell
+// can be rendered without a live GraphQL client.
+const mockUseNotifications = jest.fn();
+jest.mock("@/components/notifications/useNotifications", () => ({
+  useNotifications: () => mockUseNotifications(),
+}));
+
 jest.mock("next/link", () => {
   const MockLink = ({
     href,
@@ -24,6 +31,18 @@ jest.mock("next/link", () => {
 });
 
 describe("AppShell mobile navigation", () => {
+  beforeEach(() => {
+    mockUseNotifications.mockReturnValue({
+      notifications: [],
+      unreadCount: 0,
+      loading: false,
+      markRead: jest.fn(),
+      markAllRead: jest.fn(),
+      clearAll: jest.fn(),
+      refetch: jest.fn(),
+    });
+  });
+
   it("renders the app header with logo", () => {
     render(
       <AppShell>
