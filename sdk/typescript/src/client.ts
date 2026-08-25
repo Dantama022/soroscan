@@ -488,6 +488,8 @@ export class SoroScanClient {
    */
   async getIndexerStats(indexer: string): Promise<IndexerStats> {
     return this.#request<IndexerStats>("GET", `/v1/indexer-stats/${indexer}`);
+  }
+  /*
    * Get the contract's current pause/health status (SC-28).
    *
    * @example

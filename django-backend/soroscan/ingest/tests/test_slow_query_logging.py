@@ -1,5 +1,5 @@
 """Tests for slow query logging middleware (issue #875)."""
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from django.test import TestCase, RequestFactory, override_settings
 from django.db import connection

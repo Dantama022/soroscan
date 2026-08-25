@@ -295,8 +295,6 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-import os
-
 # CORS Configuration
 if "ALLOWED_ORIGINS" in os.environ:
     raw_origins = os.environ["ALLOWED_ORIGINS"]

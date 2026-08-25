@@ -1,9 +1,8 @@
 import hashlib
 import hmac
 
-import pytest
-from django.http import HttpRequest, JsonResponse
-from django.test import RequestFactory, override_settings
+from django.http import JsonResponse
+from django.test import RequestFactory
 
 from soroscan.ingest.decorators import validate_webhook_signature
 
