@@ -28,7 +28,7 @@ class TestValidateWebhookSignature:
         body = b'{"event": "test"}'
         sig = _sign(body)
         request = FACTORY.post("/hook", data=body, content_type="application/json")
-        request.META["HTTP_X_SCOROSCAN_SIGNATURE"] = sig
+        request.META["HTTP_X_SOROSCAN_SIGNATURE"] = sig
         response = decorated(request)
         assert response.status_code == 200
 
@@ -37,7 +37,7 @@ class TestValidateWebhookSignature:
         body = b'{"event": "test"}'
         sig = _sign(body, algorithm="sha1")
         request = FACTORY.post("/hook", data=body, content_type="application/json")
-        request.META["HTTP_X_SCOROSCAN_SIGNATURE"] = sig
+        request.META["HTTP_X_SOROSCAN_SIGNATURE"] = sig
         response = decorated(request)
         assert response.status_code == 200
 
@@ -50,21 +50,21 @@ class TestValidateWebhookSignature:
     def test_invalid_signature_returns_401(self):
         decorated = validate_webhook_signature(SECRET)(_view)
         request = FACTORY.post("/hook", data=b'{"event": "test"}', content_type="application/json")
-        request.META["HTTP_X_SCOROSCAN_SIGNATURE"] = "sha256=0000000000000000000000000000000000000000000000000000000000000000"
+        request.META["HTTP_X_SOROSCAN_SIGNATURE"] = "sha256=0000000000000000000000000000000000000000000000000000000000000000"
         response = decorated(request)
         assert response.status_code == 401
 
     def test_malformed_signature_returns_401(self):
         decorated = validate_webhook_signature(SECRET)(_view)
         request = FACTORY.post("/hook", data=b"{}", content_type="application/json")
-        request.META["HTTP_X_SCOROSCAN_SIGNATURE"] = "no-equals-sign"
+        request.META["HTTP_X_SOROSCAN_SIGNATURE"] = "no-equals-sign"
         response = decorated(request)
         assert response.status_code == 401
 
     def test_unsupported_algorithm_returns_401(self):
         decorated = validate_webhook_signature(SECRET)(_view)
         request = FACTORY.post("/hook", data=b"{}", content_type="application/json")
-        request.META["HTTP_X_SCOROSCAN_SIGNATURE"] = "sha512=abcdef"
+        request.META["HTTP_X_SOROSCAN_SIGNATURE"] = "sha512=abcdef"
         response = decorated(request)
         assert response.status_code == 401
 
@@ -82,7 +82,7 @@ class TestValidateWebhookSignature:
         body = b'{"data": 1}'
         sig = _sign(body)
         request = FACTORY.post("/hook", data=body, content_type="application/json")
-        request.META["HTTP_X_SCOROSCAN_SIGNATURE"] = sig
+        request.META["HTTP_X_SOROSCAN_SIGNATURE"] = sig
         response = decorated(request)
         assert response.status_code == 200
 
@@ -116,7 +116,7 @@ class TestValidateWebhookSignature:
         body = b""
         sig = _sign(body)
         request = FACTORY.post("/hook", data=body, content_type="application/octet-stream")
-        request.META["HTTP_X_SCOROSCAN_SIGNATURE"] = sig
+        request.META["HTTP_X_SOROSCAN_SIGNATURE"] = sig
         response = decorated(request)
         assert response.status_code == 200
 
@@ -125,6 +125,6 @@ class TestValidateWebhookSignature:
         body = b"test"
         sig = _sign(body)
         request = FACTORY.post("/hook", data=body, content_type="text/plain")
-        request.META["HTTP_X_SCOROSCAN_SIGNATURE"] = f"  sha256  ={sig.split('=', 1)[1]}"
+        request.META["HTTP_X_SOROSCAN_SIGNATURE"] = f"  sha256  ={sig.split('=', 1)[1]}"
         response = decorated(request)
         assert response.status_code == 200

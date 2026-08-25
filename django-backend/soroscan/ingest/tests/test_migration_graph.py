@@ -31,8 +31,8 @@ def test_single_leaf_node():
         f"Expected 1 leaf node for 'ingest', found {len(leaf_nodes)}: {leaf_nodes}"
     )
     # Updated to reflect the newest migration leaf.
-    assert leaf_nodes[0][1].startswith("0050_"), (
-        f"Expected leaf node starting with '0050_', got '{leaf_nodes[0][1]}'"
+    assert leaf_nodes[0][1].startswith("0051_"), (
+        f"Expected leaf node starting with '0051_', got '{leaf_nodes[0][1]}'"
     )
 
 

@@ -7,7 +7,7 @@ mod macro_integration_tests {
     use soroban_sdk::{Address, BytesN, Env};
     use soroscan_core::{EventEntry, SoroScanCore, SoroScanCoreClient};
 
-    fn setup_contract(env: &Env) -> (SoroScanCoreClient, Address) {
+    fn setup_contract(env: &Env) -> (SoroScanCoreClient<'_>, Address) {
         env.mock_all_auths();
         let contract_id = env.register_contract(None, SoroScanCore);
         let client = SoroScanCoreClient::new(env, &contract_id);
@@ -30,9 +30,7 @@ mod macro_integration_tests {
         assert!(!events.is_empty());
 
         // Check that at least one event has the "soroscan" + "add" topics structure
-        let has_add_event = events.iter().any(|event| {
-            event.1.len() >= 2
-        });
+        let has_add_event = events.iter().any(|event| event.1.len() >= 2);
         assert!(has_add_event, "Should have emitted an indexer add event");
     }
 
@@ -62,7 +60,10 @@ mod macro_integration_tests {
             .expect("Should have at least one event with multiple topics");
 
         // Verify topics vector format
-        assert!(recorded_event.1.len() >= 2, "Event should have topic structure");
+        assert!(
+            recorded_event.1.len() >= 2,
+            "Event should have topic structure"
+        );
     }
 
     #[test]
@@ -96,7 +97,10 @@ mod macro_integration_tests {
 
         // Get all events and verify batch summary event was emitted
         let all_events = env.events().all();
-        assert!(all_events.len() >= 3, "Should have multiple events including batch summary");
+        assert!(
+            all_events.len() >= 3,
+            "Should have multiple events including batch summary"
+        );
 
         // Verify batch summary event structure
         let batch_event = all_events
@@ -140,7 +144,7 @@ mod macro_integration_tests {
         // Verify consistent XDR structure across all events
         for event in all_events.iter() {
             // Each event should have topics (at minimum 1, but typically 2+ for soroscan events)
-            assert!(event.1.len() >= 1, "Each event must have at least 1 topic");
+            assert!(!event.1.is_empty(), "Each event must have at least 1 topic");
         }
     }
 
@@ -168,8 +172,6 @@ mod macro_integration_tests {
         assert_eq!(stored.contract_id, target_contract);
         assert_eq!(stored.event_type, event_type);
         assert_eq!(stored.payload_hash, payload_hash);
-        assert!(stored.ledger >= 0, "Ledger should be set");
-        assert!(stored.timestamp >= 0, "Timestamp should be set");
     }
 
     #[test]

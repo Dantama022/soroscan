@@ -295,12 +295,14 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
+import os
+
 # CORS Configuration
-ALLOWED_ORIGINS_ENV = env.str("ALLOWED_ORIGINS", default="")
-if ALLOWED_ORIGINS_ENV:
+if "ALLOWED_ORIGINS" in os.environ:
+    raw_origins = os.environ["ALLOWED_ORIGINS"]
     CORS_ALLOWED_ORIGINS = [
         origin.strip() 
-        for origin in ALLOWED_ORIGINS_ENV.split(",") 
+        for origin in raw_origins.split(",") 
         if origin.strip()
     ]
 else:

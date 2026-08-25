@@ -178,17 +178,17 @@ class TestSorobanClient:
 
         assert result is None
 
-    def test_add_indexer_no_admin_keypair(self, mock_server, hex_contract_id):
+    def test_add_indexer_no_admin_keypair(self, hex_contract_id, valid_keypair):
         client = SorobanClient(
             rpc_url="https://soroban-testnet.stellar.org",
             contract_id=hex_contract_id,
             secret_key="",
         )
-        result = client.add_indexer("G" + "A" * 54)
+        result = client.add_indexer(valid_keypair.public_key)
         assert result.success is False
         assert result.error == "No admin keypair configured"
 
-    def test_add_indexer_success(self, client, hex_contract_id):
+    def test_add_indexer_success(self, client, hex_contract_id, valid_keypair):
         mock_account = MagicMock()
         mock_account.sequence = 1
         client.server = MagicMock()
@@ -202,6 +202,6 @@ class TestSorobanClient:
             status="PENDING", hash="addindexer123"
         )
 
-        result = client.add_indexer("G" + "A" * 54)
+        result = client.add_indexer(valid_keypair.public_key)
         assert result.success is True
         assert result.tx_hash == "addindexer123"

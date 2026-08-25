@@ -162,7 +162,9 @@ fn push_recent_event(env: &Env, contract_id: Address, record: EventRecord) {
     }
 
     all.set(contract_id, list);
-    env.storage().instance().set(&CONTRACT_RECENT_EVENTS_KEY, &all);
+    env.storage()
+        .instance()
+        .set(&CONTRACT_RECENT_EVENTS_KEY, &all);
 }
 
 #[contract]
@@ -334,7 +336,9 @@ impl SoroScanCore {
                 event_count: current_stats.event_count.saturating_add(1),
             },
         );
-        env.storage().instance().set(&CONTRACT_STATS_KEY, &contract_stats);
+        env.storage()
+            .instance()
+            .set(&CONTRACT_STATS_KEY, &contract_stats);
 
         // Track unique event types per contract (SC-17)
         let mut contract_types: Map<Address, Vec<Symbol>> = env
@@ -348,7 +352,9 @@ impl SoroScanCore {
         if !types.contains(&event_type) {
             types.push_back(event_type.clone());
             contract_types.set(contract_id.clone(), types);
-            env.storage().instance().set(&CONTRACT_EVENT_TYPES_KEY, &contract_types);
+            env.storage()
+                .instance()
+                .set(&CONTRACT_EVENT_TYPES_KEY, &contract_types);
         }
 
         // Track recent events per contract, bounded FIFO (SC-30)
@@ -540,7 +546,11 @@ impl SoroScanCore {
         };
 
         let stored_len = stored.len();
-        let take = if limit == 0 { stored_len } else { limit.min(stored_len) };
+        let take = if limit == 0 {
+            stored_len
+        } else {
+            limit.min(stored_len)
+        };
 
         let mut result = Vec::new(&env);
         for i in 0..take {
@@ -684,8 +694,12 @@ impl SoroScanCore {
         }
 
         env.storage().instance().set(&COUNTER_KEY, &count);
-        env.storage().instance().set(&CONTRACT_STATS_KEY, &contract_stats);
-        env.storage().instance().set(&CONTRACT_EVENT_TYPES_KEY, &contract_types);
+        env.storage()
+            .instance()
+            .set(&CONTRACT_STATS_KEY, &contract_stats);
+        env.storage()
+            .instance()
+            .set(&CONTRACT_EVENT_TYPES_KEY, &contract_types);
 
         Self::bump_indexer_count(&env, &indexer, batch_len as u64);
 
@@ -743,11 +757,7 @@ impl SoroScanCore {
     /// * `env` - The contract environment
     /// * `admin` - The admin address (must match stored admin)
     /// * `indexer` - The indexer address to resume
-    pub fn resume_indexer(
-        env: Env,
-        admin: Address,
-        indexer: Address,
-    ) -> Result<(), ContractError> {
+    pub fn resume_indexer(env: Env, admin: Address, indexer: Address) -> Result<(), ContractError> {
         admin.require_auth();
 
         let stored_admin: Address = env
@@ -968,10 +978,9 @@ impl SoroScanCore {
             .unwrap_or(0)
             .saturating_add(1);
         env.storage().instance().set(&COUNTER_KEY, &count);
-        env.storage().instance().set(
-            &DataKey::LatestTaggedByType(event_type.clone()),
-            &record,
-        );
+        env.storage()
+            .instance()
+            .set(&DataKey::LatestTaggedByType(event_type.clone()), &record);
 
         env.events().publish(
             (symbol_short!("soroscan"), symbol_short!("sc24"), event_type),
@@ -1439,9 +1448,7 @@ mod tests {
 
     #[test]
     fn test_event_decoding_and_types() {
-        use soroban_sdk::{TryFromVal
-        
-        };
+        use soroban_sdk::TryFromVal;
 
         let env = Env::default();
         let _contract_id = env.register_contract(None, SoroScanCore);
@@ -1487,24 +1494,24 @@ mod tests {
             // Event 3: Testing Bytes, BytesN, Map, Vec
             env.events().publish(
                 (symbol_short!("event3"),),
-                (val_bytes.clone(), val_bytes_n.clone(), val_map.clone(), val_vec.clone()),
+                (
+                    val_bytes.clone(),
+                    val_bytes_n.clone(),
+                    val_map.clone(),
+                    val_vec.clone(),
+                ),
             );
 
             // Event 4: Edge case - Empty topics (Note: Soroban events require at least 1 topic, but we can test emitting a tuple with 1 topic and empty data)
-            env.events().publish(
-                (symbol_short!("empty"),),
-                (),
-            );
+            env.events().publish((symbol_short!("empty"),), ());
 
             // Event 5: Edge case - Large Payload
             let mut large_map = Map::<u32, BytesN<32>>::new(&env);
             for i in 0..10 {
                 large_map.set(i, BytesN::from_array(&env, &[i as u8; 32]));
             }
-            env.events().publish(
-                (symbol_short!("large"),),
-                large_map.clone(),
-            );
+            env.events()
+                .publish((symbol_short!("large"),), large_map.clone());
         });
 
         // Retrieve and decode all published events
@@ -1512,14 +1519,17 @@ mod tests {
         assert!(all_events.len() >= 5);
 
         // Find the event with topic "event1"
-        let event1 = all_events.iter().find(|e| {
-            if e.1.len() > 0 {
-                if let Ok(sym) = Symbol::try_from_val(&env, &e.1.get(0).unwrap()) {
-                    return sym == symbol_short!("event1");
+        let event1 = all_events
+            .iter()
+            .find(|e| {
+                if !e.1.is_empty() {
+                    if let Ok(sym) = Symbol::try_from_val(&env, &e.1.get(0).unwrap()) {
+                        return sym == symbol_short!("event1");
+                    }
                 }
-            }
-            false
-        }).expect("event1 should exist");
+                false
+            })
+            .expect("event1 should exist");
 
         // Verify topic extraction
         assert_eq!(event1.1.len(), 3);
@@ -1536,14 +1546,17 @@ mod tests {
         assert_eq!(payload1.3, val_i64);
 
         // Find event2
-        let event2 = all_events.iter().find(|e| {
-            if e.1.len() > 0 {
-                if let Ok(sym) = Symbol::try_from_val(&env, &e.1.get(0).unwrap()) {
-                    return sym == symbol_short!("event2");
+        let event2 = all_events
+            .iter()
+            .find(|e| {
+                if !e.1.is_empty() {
+                    if let Ok(sym) = Symbol::try_from_val(&env, &e.1.get(0).unwrap()) {
+                        return sym == symbol_short!("event2");
+                    }
                 }
-            }
-            false
-        }).expect("event2 should exist");
+                false
+            })
+            .expect("event2 should exist");
 
         let extracted_addr = Address::try_from_val(&env, &event2.1.get(1).unwrap()).unwrap();
         assert_eq!(extracted_addr, val_address);
@@ -1553,45 +1566,62 @@ mod tests {
         assert_eq!(payload2.1, val_i128);
 
         // Find event3
-        let event3 = all_events.iter().find(|e| {
-            if e.1.len() > 0 {
-                if let Ok(sym) = Symbol::try_from_val(&env, &e.1.get(0).unwrap()) {
-                    return sym == symbol_short!("event3");
+        let event3 = all_events
+            .iter()
+            .find(|e| {
+                if !e.1.is_empty() {
+                    if let Ok(sym) = Symbol::try_from_val(&env, &e.1.get(0).unwrap()) {
+                        return sym == symbol_short!("event3");
+                    }
                 }
-            }
-            false
-        }).expect("event3 should exist");
+                false
+            })
+            .expect("event3 should exist");
 
-        let payload3: (soroban_sdk::Bytes, BytesN<32>, Map<Symbol, u32>, soroban_sdk::Vec<Symbol>) =
-            TryFromVal::try_from_val(&env, &event3.2).unwrap();
+        let payload3: (
+            soroban_sdk::Bytes,
+            BytesN<32>,
+            Map<Symbol, u32>,
+            soroban_sdk::Vec<Symbol>,
+        ) = TryFromVal::try_from_val(&env, &event3.2).unwrap();
         assert_eq!(payload3.0, val_bytes);
         assert_eq!(payload3.1, val_bytes_n);
         assert_eq!(payload3.2.get(symbol_short!("key1")).unwrap(), 100);
         assert_eq!(payload3.3.get(0).unwrap(), symbol_short!("item1"));
 
         // Find empty event
-        let event_empty = all_events.iter().find(|e| {
-            if e.1.len() > 0 {
-                if let Ok(sym) = Symbol::try_from_val(&env, &e.1.get(0).unwrap()) {
-                    return sym == symbol_short!("empty");
+        let event_empty = all_events
+            .iter()
+            .find(|e| {
+                if !e.1.is_empty() {
+                    if let Ok(sym) = Symbol::try_from_val(&env, &e.1.get(0).unwrap()) {
+                        return sym == symbol_short!("empty");
+                    }
                 }
-            }
-            false
-        }).expect("empty event should exist");
+                false
+            })
+            .expect("empty event should exist");
         assert_eq!(event_empty.1.len(), 1); // just "empty"
 
         // Find large event
-        let event_large = all_events.iter().find(|e| {
-            if e.1.len() > 0 {
-                if let Ok(sym) = Symbol::try_from_val(&env, &e.1.get(0).unwrap()) {
-                    return sym == symbol_short!("large");
+        let event_large = all_events
+            .iter()
+            .find(|e| {
+                if !e.1.is_empty() {
+                    if let Ok(sym) = Symbol::try_from_val(&env, &e.1.get(0).unwrap()) {
+                        return sym == symbol_short!("large");
+                    }
                 }
-            }
-            false
-        }).expect("large event should exist");
-        let payload_large: Map<u32, BytesN<32>> = TryFromVal::try_from_val(&env, &event_large.2).unwrap();
+                false
+            })
+            .expect("large event should exist");
+        let payload_large: Map<u32, BytesN<32>> =
+            TryFromVal::try_from_val(&env, &event_large.2).unwrap();
         assert_eq!(payload_large.len(), 10);
-        assert_eq!(payload_large.get(5).unwrap(), BytesN::from_array(&env, &[5u8; 32]));
+        assert_eq!(
+            payload_large.get(5).unwrap(),
+            BytesN::from_array(&env, &[5u8; 32])
+        );
     }
 
     // ── SC-10: pause/resume indexer ─────────────────────────────────────────
@@ -1718,7 +1748,10 @@ mod tests {
 
         let result = client.try_pause_indexer(&non_admin, &indexer);
         assert_eq!(result, Err(Ok(ContractError::Unauthorized)));
-        assert_eq!(client.get_indexer_status(&indexer), Some(IndexerStatus::Active));
+        assert_eq!(
+            client.get_indexer_status(&indexer),
+            Some(IndexerStatus::Active)
+        );
     }
 
     #[test]
@@ -1860,8 +1893,14 @@ mod tests {
         let events = client.recent_events(&target, &2);
         assert_eq!(events.len(), 2);
         // Newest first: the last two recorded payload hashes are [4;32] then [3;32].
-        assert_eq!(events.get(0).unwrap().payload_hash, BytesN::from_array(&env, &[4u8; 32]));
-        assert_eq!(events.get(1).unwrap().payload_hash, BytesN::from_array(&env, &[3u8; 32]));
+        assert_eq!(
+            events.get(0).unwrap().payload_hash,
+            BytesN::from_array(&env, &[4u8; 32])
+        );
+        assert_eq!(
+            events.get(1).unwrap().payload_hash,
+            BytesN::from_array(&env, &[3u8; 32])
+        );
     }
 
     #[test]
@@ -1886,7 +1925,7 @@ mod tests {
 
         // Only the cap worth of events are retained.
         let events = client.recent_events(&target, &0);
-        assert_eq!(events.len(), MAX_RECENT_EVENTS_PER_CONTRACT as u32);
+        assert_eq!(events.len(), MAX_RECENT_EVENTS_PER_CONTRACT);
 
         // The newest entry corresponds to the 25th recorded event (index 24).
         assert_eq!(
