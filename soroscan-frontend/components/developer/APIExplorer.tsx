@@ -27,16 +27,14 @@ const DEFAULT_QUERY = `# Welcome to the SoroScan GraphQL Playground
 # The Explorer panel on the left lists all available fields.
 
 query GetRecentEvents {
-  events(contractId: "CABC...9X4Z", first: 10) {
-    edges {
-      node {
-        id
-        contractId
-        eventType
-        data
-        createdAt
-      }
-    }
+  events(limit: 10) {
+    id
+    contractId
+    contractName
+    eventType
+    data
+    timestamp
+    ledger
   }
 }
 `;
@@ -114,7 +112,6 @@ export function APIExplorer({
         defaultQuery={defaultQuery}
         plugins={[explorer]}
         shouldPersistHeaders
-        editorTheme="dracula"
       />
     </div>
   );

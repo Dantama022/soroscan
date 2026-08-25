@@ -5,6 +5,12 @@ venv/
 .venv/
 .venv-*/
 node_modules/
+.pnpm-store/
+.hypothesis/
+.pytest_cache/
+.next/
+logs/
 PUSH_ISSUES_README.md
 push_issues_to_github.py
+scripts/push_new_wave_issues.py
 backlogs/

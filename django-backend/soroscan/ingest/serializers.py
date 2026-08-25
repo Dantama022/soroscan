@@ -573,6 +573,9 @@ class AddIndexerRequestSerializer(serializers.Serializer):
     indexer_address = serializers.CharField(
         max_length=56,
         help_text="Stellar address of the indexer to authorize",
+    )
+
+
 class StructuredEventRequestSerializer(RecordEventRequestSerializer):
     """SC-38 request payload for versioned, idempotent contract events."""
 
@@ -721,3 +724,40 @@ class EventAggregationSerializer(serializers.Serializer):
     event_type = serializers.CharField(allow_blank=True)
     event_count = serializers.IntegerField()
     is_anomaly = serializers.BooleanField()
+
+
+class EventsByContractsRequestSerializer(serializers.Serializer):
+    """Request payload serializer for fetching events across multiple contracts."""
+
+    contract_ids = serializers.ListField(
+        child=serializers.CharField(),
+        min_length=1,
+        max_length=10,
+        help_text="List of contract IDs to filter events by (max 10)",
+    )
+    event_type = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default=None,
+        help_text="Optional event type name to filter",
+    )
+    ledger_min = serializers.IntegerField(
+        required=False,
+        min_value=0,
+        default=None,
+        help_text="Minimum ledger sequence",
+    )
+    ledger_max = serializers.IntegerField(
+        required=False,
+        min_value=0,
+        default=None,
+        help_text="Maximum ledger sequence",
+    )
+    ordering = serializers.ChoiceField(
+        choices=["-created_at", "created_at", "-ledger", "ledger"],
+        default="-created_at",
+        help_text="Sort ordering field",
+    )
+    page = serializers.IntegerField(default=1, min_value=1, help_text="Page number")
+    page_size = serializers.IntegerField(default=20, min_value=1, max_value=100, help_text="Page size")
+

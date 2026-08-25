@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -107,7 +108,6 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-terminal-black text-terminal-green font-terminal-mono transition-colors duration-200">
-    <div className="min-h-screen bg-terminal-black text-terminal-green font-terminal-mono">
       {/* Skip to main content link for screen reader and keyboard accessibility */}
       <a
         href="#main-content"
@@ -117,7 +117,7 @@ export function AppShell({ children }: AppShellProps) {
       </a>
 
       {/* Top header */}
-      <header className="sticky top-0 z-30 flex h-[60px] items-center gap-3 border-b border-terminal-green/30 bg-gradient-to-r from-terminal-black to-[#1a1f3a] px-4">
+      <header className="sticky top-0 z-30 flex h-[60px] items-center gap-3 border-b border-[#00e5ff]/20 bg-gradient-to-r from-[#091a21] via-[#0e2530] to-[#132b36] px-4">
         <HamburgerToggle
           isOpen={sidebarOpen}
           onClick={() => setSidebarOpen((open) => !open)}
@@ -127,9 +127,16 @@ export function AppShell({ children }: AppShellProps) {
 
         <Link
           href="/dashboard"
-          className="text-lg font-bold tracking-wider text-terminal-green hover:text-terminal-cyan transition-colors min-h-[44px] inline-flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terminal-green"
+          className="flex items-center gap-2 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00e5ff]"
         >
-          ◆ SoroScan
+          <Image
+            src="/soroscan-logo-dark.png"
+            alt="SoroScan Logo"
+            width={130}
+            height={32}
+            className="h-8 w-auto object-contain"
+            priority
+          />
         </Link>
 
         <div className="ml-auto flex items-center gap-2">

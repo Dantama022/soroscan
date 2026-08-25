@@ -267,7 +267,7 @@ export function ResponsiveTableDemo() {
           ResponsiveTable Demo
         </h2>
         <p className="text-terminal-gray">
-          Resize your browser window to see the table transform into cards on mobile devices (< 768px).
+          Resize your browser window to see the table transform into cards on mobile devices (&lt; 768px).
         </p>
         <div className="flex gap-2">
           <button
@@ -358,7 +358,7 @@ export function ResponsiveTableDemo() {
             </ul>
           </div>
           <div>
-            <h4 className="text-terminal-green font-bold mb-2">Mobile (<768px):</h4>
+            <h4 className="text-terminal-green font-bold mb-2">Mobile (&lt;768px):</h4>
             <ul className="list-disc list-inside space-y-1 ml-4">
               <li>Card-based layout for better readability</li>
               <li>Icon + Label + Value stacking pattern</li>

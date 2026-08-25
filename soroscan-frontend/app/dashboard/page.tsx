@@ -88,6 +88,18 @@ const drTests = [
 export default function DashboardPage() {
   const [publicPageStatus, setPublicPageStatus] = useState(true);
   const [regionFailureAlertEnabled, setRegionFailureAlertEnabled] = useState(true);
+  const [index, setIndex] = useState(0);
+
+  const snapshots = [
+    { apiP95Ms: 42, apiP99Ms: 78, cacheHitRate: 98.4, cpuUtilization: 34, memoryUtilization: 52 },
+    { apiP95Ms: 45, apiP99Ms: 82, cacheHitRate: 97.9, cpuUtilization: 38, memoryUtilization: 54 },
+    { apiP95Ms: 39, apiP99Ms: 71, cacheHitRate: 98.8, cpuUtilization: 31, memoryUtilization: 50 },
+    { apiP95Ms: 51, apiP99Ms: 94, cacheHitRate: 96.5, cpuUtilization: 45, memoryUtilization: 58 },
+    { apiP95Ms: 48, apiP99Ms: 88, cacheHitRate: 97.2, cpuUtilization: 41, memoryUtilization: 55 },
+    { apiP95Ms: 43, apiP99Ms: 75, cacheHitRate: 98.1, cpuUtilization: 36, memoryUtilization: 51 },
+  ];
+
+  const current = snapshots[snapshots.length - 1];
 
   const aggregate = useMemo(() => {
     const avgLatency =
@@ -323,6 +335,7 @@ export default function DashboardPage() {
               Snapshot {i + 1}
             </button>
           ))}
+        </section>
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <article className="rounded border border-terminal-yellow/20 p-4">
             <h2 className="mb-3 text-sm text-terminal-yellow">Incident Timeline</h2>
@@ -390,9 +403,9 @@ export default function DashboardPage() {
 
 function MetricCard({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <article className="rounded border border-terminal-green/20 bg-black/30 p-4">
+    <article className="rounded-lg border border-[#00e5ff]/20 bg-[#132b36]/60 backdrop-blur-sm p-4 shadow-card hover:border-[#00e5ff]/40 transition-all">
       <p className="text-xs text-terminal-gray">{label}</p>
-      <p className="mt-2 text-2xl">{value}</p>
+      <p className="mt-2 text-2xl font-mono text-[#00e5ff] tracking-tight">{value}</p>
       <p className="mt-1 text-xs text-terminal-cyan">{hint}</p>
     </article>
   );

@@ -21,16 +21,6 @@ const MAX_RECENT_EVENTS_PER_CONTRACT: u32 = 20;
 /// Maximum `limit` value accepted by `recent_events` (SC-30).
 const MAX_RECENT_EVENTS_QUERY_LIMIT: u32 = MAX_RECENT_EVENTS_PER_CONTRACT;
 
-/// Represents a recorded event from an indexed contract.
-#[contracttype]
-#[derive(Clone)]
-enum DataKey {
-    StructuredByCorrelation(BytesN<32>),
-    LatestStructuredByType(Symbol),
-    /// SC-24: latest tagged event keyed by event_type
-    LatestTaggedByType(Symbol),
-}
-
 /// Maximum number of producer-defined tags per SC-24 event.
 const MAX_TAGS: u32 = 4;
 
@@ -124,6 +114,8 @@ pub enum DataKey {
     StructuredByCorrelation(BytesN<32>),
     /// The latest structured event recorded for a given event type.
     LatestStructuredByType(Symbol),
+    /// SC-24: latest tagged event keyed by event_type.
+    LatestTaggedByType(Symbol),
 }
 
 /// Contract errors with explicit error codes.
@@ -143,13 +135,15 @@ pub enum ContractError {
     /// Event recording is currently paused by the admin.
     ContractPaused = 6,
     /// The indexer is currently paused and cannot record events (SC-10).
-    IndexerPaused = 6,
+    IndexerPaused = 7,
     /// Structured event `schema_version` must be greater than zero (SC-38).
-    InvalidSchemaVersion = 7,
+    InvalidSchemaVersion = 8,
     /// A structured event with this correlation ID was already recorded (SC-38).
-    DuplicateCorrelation = 8,
+    DuplicateCorrelation = 9,
     /// The requested recent-events limit exceeds the maximum allowed (SC-30).
-    InvalidLimit = 9,
+    InvalidLimit = 10,
+    /// Number of producer tags exceeds MAX_TAGS limit (SC-24).
+    TooManyTags = 11,
 }
 
 /// Append `record` to the bounded recent-events ring buffer for `contract_id`,
@@ -291,17 +285,13 @@ impl SoroScanCore {
             return Err(ContractError::ContractPaused);
         }
 
-        let indexers: Map<Address, bool> = env
         let indexers: Map<Address, IndexerStatus> = env
             .storage()
             .instance()
             .get(&INDEXERS_KEY)
             .ok_or(ContractError::NotInitialized)?;
 
-        let is_allowed = indexers.get(indexer.clone()).unwrap_or(false);
-        if !is_allowed {
-            return Err(ContractError::IndexerNotFound);
-        match indexers.get(indexer) {
+        match indexers.get(indexer.clone()) {
             Some(IndexerStatus::Active) => {}
             Some(IndexerStatus::Paused) => return Err(ContractError::IndexerPaused),
             None => return Err(ContractError::IndexerNotFound),
@@ -328,6 +318,44 @@ impl SoroScanCore {
 
         // Store latest event by contract (SC-16)
         env.storage().instance().set(&contract_id, &record);
+
+        // Update per-contract event count (SC-17)
+        let mut contract_stats: Map<Address, ContractStats> = env
+            .storage()
+            .instance()
+            .get(&CONTRACT_STATS_KEY)
+            .unwrap_or(Map::new(&env));
+        let current_stats = contract_stats
+            .get(contract_id.clone())
+            .unwrap_or(ContractStats { event_count: 0 });
+        contract_stats.set(
+            contract_id.clone(),
+            ContractStats {
+                event_count: current_stats.event_count.saturating_add(1),
+            },
+        );
+        env.storage().instance().set(&CONTRACT_STATS_KEY, &contract_stats);
+
+        // Track unique event types per contract (SC-17)
+        let mut contract_types: Map<Address, Vec<Symbol>> = env
+            .storage()
+            .instance()
+            .get(&CONTRACT_EVENT_TYPES_KEY)
+            .unwrap_or(Map::new(&env));
+        let mut types = contract_types
+            .get(contract_id.clone())
+            .unwrap_or(Vec::new(&env));
+        if !types.contains(&event_type) {
+            types.push_back(event_type.clone());
+            contract_types.set(contract_id.clone(), types);
+            env.storage().instance().set(&CONTRACT_EVENT_TYPES_KEY, &contract_types);
+        }
+
+        // Track recent events per contract, bounded FIFO (SC-30)
+        push_recent_event(&env, contract_id.clone(), record.clone());
+
+        // Increment recorded-event count for indexer (SC-13)
+        Self::bump_indexer_count(&env, &indexer, 1);
 
         // Publish the event for off-chain indexers
         env.events()
@@ -360,7 +388,7 @@ impl SoroScanCore {
             .instance()
             .get(&INDEXERS_KEY)
             .ok_or(ContractError::NotInitialized)?;
-        if !indexers.get(indexer).unwrap_or(false) {
+        if !indexers.get(indexer.clone()).unwrap_or(false) {
             return Err(ContractError::IndexerNotFound);
         }
 
@@ -626,6 +654,29 @@ impl SoroScanCore {
             // Store latest event by contract (SC-16)
             env.storage().instance().set(&entry.contract_id, &record);
 
+            // Update per-contract event count (SC-17)
+            let current_stats = contract_stats
+                .get(entry.contract_id.clone())
+                .unwrap_or(ContractStats { event_count: 0 });
+            contract_stats.set(
+                entry.contract_id.clone(),
+                ContractStats {
+                    event_count: current_stats.event_count.saturating_add(1),
+                },
+            );
+
+            // Track unique event types per contract (SC-17)
+            let mut types = contract_types
+                .get(entry.contract_id.clone())
+                .unwrap_or(Vec::new(&env));
+            if !types.contains(&entry.event_type) {
+                types.push_back(entry.event_type.clone());
+                contract_types.set(entry.contract_id.clone(), types);
+            }
+
+            // Track recent events per contract, bounded FIFO (SC-30)
+            push_recent_event(&env, entry.contract_id.clone(), record.clone());
+
             env.events().publish(
                 (symbol_short!("soroscan"), entry.event_type.clone()),
                 record,
@@ -796,6 +847,7 @@ impl SoroScanCore {
         let current = counts.get(indexer.clone()).unwrap_or(0);
         counts.set(indexer.clone(), current.saturating_add(by));
         env.storage().instance().set(&INDEXER_COUNTS_KEY, &counts);
+    }
     /// Pause event recording (SC-28).
     /// While paused, `record_event` and `record_events_batch` are disabled.
     ///
@@ -859,6 +911,7 @@ impl SoroScanCore {
     /// true if paused, false otherwise
     pub fn is_paused(env: Env) -> bool {
         env.storage().instance().get(&PAUSED_KEY).unwrap_or(false)
+    }
     /// Record an SC-24 tagged event.
     ///
     /// Works like `record_event` but accepts an optional list of producer-
@@ -1386,7 +1439,9 @@ mod tests {
 
     #[test]
     fn test_event_decoding_and_types() {
-        use soroban_sdk::{TryFromVal, Val};
+        use soroban_sdk::{TryFromVal
+        
+        };
 
         let env = Env::default();
         let _contract_id = env.register_contract(None, SoroScanCore);
@@ -1415,40 +1470,42 @@ mod tests {
         val_vec.push_back(symbol_short!("item1"));
         val_vec.push_back(symbol_short!("item2"));
 
-        // Emitting events with various topics and payloads to test topic extraction and symbol parsing
-        // Event 1: Testing simple types
-        env.events().publish(
-            (symbol_short!("event1"), val_symbol.clone(), val_bool),
-            (val_u32, val_i32, val_u64, val_i64),
-        );
+        env.as_contract(&_contract_id, || {
+            // Emitting events with various topics and payloads to test topic extraction and symbol parsing
+            // Event 1: Testing simple types
+            env.events().publish(
+                (symbol_short!("event1"), val_symbol.clone(), val_bool),
+                (val_u32, val_i32, val_u64, val_i64),
+            );
 
-        // Event 2: Testing large integers and Address
-        env.events().publish(
-            (symbol_short!("event2"), val_address.clone()),
-            (val_u128, val_i128),
-        );
+            // Event 2: Testing large integers and Address
+            env.events().publish(
+                (symbol_short!("event2"), val_address.clone()),
+                (val_u128, val_i128),
+            );
 
-        // Event 3: Testing Bytes, BytesN, Map, Vec
-        env.events().publish(
-            (symbol_short!("event3"),),
-            (val_bytes.clone(), val_bytes_n.clone(), val_map.clone(), val_vec.clone()),
-        );
+            // Event 3: Testing Bytes, BytesN, Map, Vec
+            env.events().publish(
+                (symbol_short!("event3"),),
+                (val_bytes.clone(), val_bytes_n.clone(), val_map.clone(), val_vec.clone()),
+            );
 
-        // Event 4: Edge case - Empty topics (Note: Soroban events require at least 1 topic, but we can test emitting a tuple with 1 topic and empty data)
-        env.events().publish(
-            (symbol_short!("empty"),),
-            (),
-        );
+            // Event 4: Edge case - Empty topics (Note: Soroban events require at least 1 topic, but we can test emitting a tuple with 1 topic and empty data)
+            env.events().publish(
+                (symbol_short!("empty"),),
+                (),
+            );
 
-        // Event 5: Edge case - Large Payload
-        let mut large_map = Map::<u32, BytesN<32>>::new(&env);
-        for i in 0..10 {
-            large_map.set(i, BytesN::from_array(&env, &[i as u8; 32]));
-        }
-        env.events().publish(
-            (symbol_short!("large"),),
-            large_map.clone(),
-        );
+            // Event 5: Edge case - Large Payload
+            let mut large_map = Map::<u32, BytesN<32>>::new(&env);
+            for i in 0..10 {
+                large_map.set(i, BytesN::from_array(&env, &[i as u8; 32]));
+            }
+            env.events().publish(
+                (symbol_short!("large"),),
+                large_map.clone(),
+            );
+        });
 
         // Retrieve and decode all published events
         let all_events = env.events().all();
@@ -1537,9 +1594,6 @@ mod tests {
         assert_eq!(payload_large.get(5).unwrap(), BytesN::from_array(&env, &[5u8; 32]));
     }
 
-    #[test]
-    fn test_events_recorded_by_tracks_single_indexer() {
-    fn test_pause_blocks_record_event() {
     // ── SC-10: pause/resume indexer ─────────────────────────────────────────
 
     #[test]
@@ -1586,20 +1640,28 @@ mod tests {
 
     #[test]
     fn test_events_recorded_by_batch_increments_by_batch_length() {
-        // Initially active
-        assert_eq!(client.get_indexer_status(&indexer), Some(IndexerStatus::Active));
-        assert!(client.is_indexer(&indexer));
+        let env = Env::default();
+        env.mock_all_auths();
 
-        // Pause
-        client.pause_indexer(&admin, &indexer);
-        assert_eq!(client.get_indexer_status(&indexer), Some(IndexerStatus::Paused));
-        // is_indexer returns false for paused indexers
-        assert!(!client.is_indexer(&indexer));
+        let (client, admin, indexer) = setup_contract(&env);
+        client.add_indexer(&admin, &indexer);
 
-        // Resume
-        client.resume_indexer(&admin, &indexer);
-        assert_eq!(client.get_indexer_status(&indexer), Some(IndexerStatus::Active));
-        assert!(client.is_indexer(&indexer));
+        let mut entries = Vec::new(&env);
+        for _ in 0..5 {
+            entries.push_back(EventEntry {
+                contract_id: Address::generate(&env),
+                event_type: symbol_short!("ev"),
+                payload_hash: BytesN::from_array(&env, &[0u8; 32]),
+            });
+        }
+
+        client.record_events_batch(&indexer, &entries);
+        assert_eq!(client.events_recorded_by(&indexer), 5);
+
+        let target = Address::generate(&env);
+        let payload_hash = BytesN::from_array(&env, &[0u8; 32]);
+        client.record_event(&indexer, &target, &symbol_short!("swap"), &payload_hash);
+        assert_eq!(client.events_recorded_by(&indexer), 6);
     }
 
     #[test]
@@ -1611,14 +1673,6 @@ mod tests {
         let target = Address::generate(&env);
 
         client.add_indexer(&admin, &indexer);
-        client.pause(&admin);
-        assert!(client.is_paused());
-
-        let event_type = symbol_short!("swap");
-        let payload_hash = BytesN::from_array(&env, &[0u8; 32]);
-
-        let result = client.try_record_event(&indexer, &target, &event_type, &payload_hash);
-        assert_eq!(result, Err(Ok(ContractError::ContractPaused)));
         client.pause_indexer(&admin, &indexer);
 
         let result = client.try_record_event(
@@ -1632,15 +1686,12 @@ mod tests {
     }
 
     #[test]
-    fn test_pause_blocks_record_events_batch() {
     fn test_paused_indexer_cannot_record_batch() {
         let env = Env::default();
         env.mock_all_auths();
 
         let (client, admin, indexer) = setup_contract(&env);
 
-        client.add_indexer(&admin, &indexer);
-        client.pause(&admin);
         client.add_indexer(&admin, &indexer);
         client.pause_indexer(&admin, &indexer);
 
@@ -1652,13 +1703,8 @@ mod tests {
         });
 
         let result = client.try_record_events_batch(&indexer, &entries);
-        assert_eq!(result, Err(Ok(ContractError::ContractPaused)));
-        assert_eq!(client.total_events(), 0);
-    }
-
-    #[test]
-    fn test_unpause_restores_recording() {
         assert_eq!(result, Err(Ok(ContractError::IndexerPaused)));
+        assert_eq!(client.total_events(), 0);
     }
 
     #[test]
@@ -1672,7 +1718,6 @@ mod tests {
 
         let result = client.try_pause_indexer(&non_admin, &indexer);
         assert_eq!(result, Err(Ok(ContractError::Unauthorized)));
-        // Still active
         assert_eq!(client.get_indexer_status(&indexer), Some(IndexerStatus::Active));
     }
 
@@ -1708,24 +1753,6 @@ mod tests {
         let target = Address::generate(&env);
 
         client.add_indexer(&admin, &indexer);
-        client.pause(&admin);
-
-        let event_type = symbol_short!("swap");
-        let payload_hash = BytesN::from_array(&env, &[0u8; 32]);
-
-        let blocked = client.try_record_event(&indexer, &target, &event_type, &payload_hash);
-        assert_eq!(blocked, Err(Ok(ContractError::ContractPaused)));
-
-        client.unpause(&admin);
-        assert!(!client.is_paused());
-
-        let count = client.record_event(&indexer, &target, &event_type, &payload_hash);
-        assert_eq!(count, 1);
-        assert_eq!(client.total_events(), 1);
-    }
-
-    #[test]
-    fn test_pause_unauthorized() {
         client.pause_indexer(&admin, &indexer);
         client.resume_indexer(&admin, &indexer);
 
@@ -1736,6 +1763,19 @@ mod tests {
             &BytesN::from_array(&env, &[0u8; 32]),
         );
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_pause_unauthorized() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (client, _admin, _indexer) = setup_contract(&env);
+        let non_admin = Address::generate(&env);
+
+        let result = client.try_pause(&non_admin);
+        assert_eq!(result, Err(Ok(ContractError::Unauthorized)));
+        assert!(!client.is_paused());
     }
 
     // ── SC-30: recent events per contract ───────────────────────────────────
@@ -1759,31 +1799,7 @@ mod tests {
 
         let (client, admin, indexer) = setup_contract(&env);
         client.add_indexer(&admin, &indexer);
-
-        let mut entries = Vec::new(&env);
-        for _ in 0..5 {
-            entries.push_back(EventEntry {
-                contract_id: Address::generate(&env),
-                event_type: symbol_short!("ev"),
-                payload_hash: BytesN::from_array(&env, &[0u8; 32]),
-            });
-        }
-
-        client.record_events_batch(&indexer, &entries);
-        assert_eq!(client.events_recorded_by(&indexer), 5);
-
-        // A subsequent single record_event should add on top of the batch count.
         let target = Address::generate(&env);
-        let payload_hash = BytesN::from_array(&env, &[0u8; 32]);
-        client.record_event(&indexer, &target, &symbol_short!("swap"), &payload_hash);
-        assert_eq!(client.events_recorded_by(&indexer), 6);
-    }
-
-    #[test]
-    fn test_events_recorded_by_unknown_indexer_returns_zero() {
-        let target = Address::generate(&env);
-
-        client.add_indexer(&admin, &indexer);
 
         client.record_event(
             &indexer,
@@ -1809,6 +1825,17 @@ mod tests {
         assert_eq!(events.get(0).unwrap().event_type, symbol_short!("third"));
         assert_eq!(events.get(1).unwrap().event_type, symbol_short!("second"));
         assert_eq!(events.get(2).unwrap().event_type, symbol_short!("first"));
+    }
+
+    #[test]
+    fn test_events_recorded_by_unknown_indexer_returns_zero() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (client, _admin, _indexer) = setup_contract(&env);
+        let stranger = Address::generate(&env);
+
+        assert_eq!(client.events_recorded_by(&stranger), 0);
     }
 
     #[test]
@@ -1843,17 +1870,6 @@ mod tests {
         env.mock_all_auths();
 
         let (client, admin, indexer) = setup_contract(&env);
-        let stranger = Address::generate(&env);
-
-        assert_eq!(client.events_recorded_by(&stranger), 0);
-
-        client.add_indexer(&admin, &indexer);
-        let target = Address::generate(&env);
-        let payload_hash = BytesN::from_array(&env, &[0u8; 32]);
-        client.record_event(&indexer, &target, &symbol_short!("swap"), &payload_hash);
-
-        // Other indexers recording events must not affect an untouched address.
-        assert_eq!(client.events_recorded_by(&stranger), 0);
         let target = Address::generate(&env);
 
         client.add_indexer(&admin, &indexer);
@@ -1885,21 +1901,18 @@ mod tests {
     }
 
     #[test]
+    fn test_is_paused_default_false() {
+        let env = Env::default();
+        let (client, _admin, _indexer) = setup_contract(&env);
+        assert!(!client.is_paused());
+    }
+
+    #[test]
     fn test_recent_events_invalid_limit() {
         let env = Env::default();
         env.mock_all_auths();
 
         let (client, _admin, _indexer) = setup_contract(&env);
-        let non_admin = Address::generate(&env);
-
-        let result = client.try_pause(&non_admin);
-        assert_eq!(result, Err(Ok(ContractError::Unauthorized)));
-        assert!(!client.is_paused());
-    }
-
-    #[test]
-    fn test_is_paused_default_false() {
-        let env = Env::default();
         let target = Address::generate(&env);
 
         let result = client.try_recent_events(&target, &(MAX_RECENT_EVENTS_PER_CONTRACT + 1));
@@ -1954,7 +1967,6 @@ mod tests {
         let indexer = Address::generate(&env);
         let target = Address::generate(&env);
 
-        client.init(&admin);
         client.add_indexer(&admin, &indexer);
 
         let mut entries = Vec::new(&env);

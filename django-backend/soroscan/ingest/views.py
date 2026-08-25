@@ -1171,6 +1171,9 @@ def add_indexer_view(request):
             {"status": "error", "error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@extend_schema(
     parameters=[
         OpenApiParameter(
             name="indexer_address",

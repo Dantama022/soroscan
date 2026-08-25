@@ -46,17 +46,17 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
 
-  /* ── Terminal Theme tokens (refined #909 / accessible #912) ───────── */
-  --color-terminal-black: #0a0e27;
-  --color-terminal-dark: #1a1f3a;
-  --color-terminal-medium: #2d3748;
-  --color-terminal-green: #00ff41;
-  --color-terminal-cyan: #00d4ff;
+  /* ── Concept B: Petrol Teal Theme Tokens (matching soroscan-logo-dark.png) ── */
+  --color-terminal-black: #091a21;
+  --color-terminal-dark: #0e2530;
+  --color-terminal-medium: #132b36;
+  --color-terminal-green: #00e5ff;
+  --color-terminal-cyan: #38bdf8;
   --color-terminal-danger: #ff3366;
   --color-terminal-warning: #ffaa00;
   --color-terminal-info: #38bdf8;
-  --color-terminal-success: #00ff41;
-  /* Was #64748b (3.99:1 FAIL). #94a3b8 yields 7.41:1 AA+AAA on terminal black. */
+  --color-terminal-success: #00e5ff;
+  /* Accessible slate gray on dark petrol teal */
   --color-terminal-gray: #94a3b8;
   --color-terminal-gray-muted: #64748b;
   --color-terminal-light: #e2e8f0;
@@ -79,12 +79,12 @@
   --size-control-lg: 3rem;
   --size-touch-min: 2.75rem;
 
-  /* Glow effects (refined intensities) */
-  --shadow-glow-green: 0 0 16px rgba(0, 255, 65, 0.45), 0 0 4px rgba(0, 255, 65, 0.35);
-  --shadow-glow-cyan: 0 0 16px rgba(0, 212, 255, 0.45), 0 0 4px rgba(0, 212, 255, 0.35);
+  /* Glow effects (refined aqua teal intensities) */
+  --shadow-glow-green: 0 0 16px rgba(0, 229, 255, 0.45), 0 0 4px rgba(0, 229, 255, 0.35);
+  --shadow-glow-cyan: 0 0 16px rgba(56, 189, 248, 0.45), 0 0 4px rgba(56, 189, 248, 0.35);
   --shadow-glow-danger: 0 0 16px rgba(255, 51, 102, 0.4), 0 0 4px rgba(255, 51, 102, 0.3);
   --shadow-glow-warning: 0 0 16px rgba(255, 170, 0, 0.4), 0 0 4px rgba(255, 170, 0, 0.3);
-  --shadow-card: 0 0 20px rgba(0, 255, 65, 0.1);
+  --shadow-card: 0 0 20px rgba(0, 229, 255, 0.12);
 
   --border-width-terminal: 2px;
 

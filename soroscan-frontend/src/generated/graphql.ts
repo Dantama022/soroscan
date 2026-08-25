@@ -78,18 +78,6 @@ export type CreateOrganizationInput = {
   name: Scalars['String']['input'];
 };
 
-export enum DataRegion {
-  ApSoutheast = 'ap_southeast',
-  EuWest = 'eu_west',
-  UsEast = 'us_east'
-}
-
-export enum DependencyType {
-  Circular = 'CIRCULAR',
-  Direct = 'DIRECT',
-  Indirect = 'INDIRECT'
-}
-
 export type DataExportResponse = {
   __typename?: 'DataExportResponse';
   downloadUrl?: Maybe<Scalars['String']['output']>;
@@ -98,12 +86,24 @@ export type DataExportResponse = {
   status: Scalars['String']['output'];
 };
 
+export enum DataRegion {
+  ApSoutheast = 'ap_southeast',
+  EuWest = 'eu_west',
+  UsEast = 'us_east'
+}
+
 export type DeletionRequestResponse = {
   __typename?: 'DeletionRequestResponse';
   approvalDate?: Maybe<Scalars['String']['output']>;
   requestId: Scalars['String']['output'];
   status: Scalars['String']['output'];
 };
+
+export enum DependencyType {
+  Circular = 'CIRCULAR',
+  Direct = 'DIRECT',
+  Indirect = 'INDIRECT'
+}
 
 export type ErrorLog = {
   __typename?: 'ErrorLog';
@@ -148,6 +148,8 @@ export type Mutation = {
   login: AuthPayload;
   refreshToken: AuthPayload;
   removeTeamMember: Scalars['Boolean']['output'];
+  requestGDPRDataExport: DataExportResponse;
+  requestRightToBeForgotten: DeletionRequestResponse;
   resendInvitation: TeamInvitation;
   switchOrganization: Organization;
   updateOrganization: Organization;
@@ -170,8 +172,6 @@ export type MutationInviteTeamMemberArgs = {
   email: Scalars['String']['input'];
   organizationId: Scalars['String']['input'];
   role: OrgRole;
-  requestGDPRDataExport: DataExportResponse;
-  requestRightToBeForgotten: DeletionRequestResponse;
 };
 
 
@@ -188,9 +188,19 @@ export type MutationRefreshTokenArgs = {
 
 export type MutationRemoveTeamMemberArgs = {
   memberId: Scalars['String']['input'];
+  organizationId: Scalars['String']['input'];
+};
+
+
 export type MutationRequestGdprDataExportArgs = {
   format: Scalars['String']['input'];
   organizationId: Scalars['String']['input'];
+};
+
+
+export type MutationRequestRightToBeForgottenArgs = {
+  reason?: InputMaybe<Scalars['String']['input']>;
+  userId: Scalars['String']['input'];
 };
 
 
@@ -243,9 +253,6 @@ export type Organization = {
   id: Scalars['ID']['output'];
   name: Scalars['String']['output'];
   webhookLimit: Scalars['Int']['output'];
-export type MutationRequestRightToBeForgottenArgs = {
-  reason?: InputMaybe<Scalars['String']['input']>;
-  userId: Scalars['String']['input'];
 };
 
 export type Query = {
@@ -380,6 +387,7 @@ export type RequestRightToBeForgottenMutationVariables = Exact<{
 
 
 export type RequestRightToBeForgottenMutation = { __typename?: 'Mutation', requestRightToBeForgotten: { __typename?: 'DeletionRequestResponse', requestId: string, status: string, approvalDate?: string | null } };
+
 export type SaveSearchPlaceholderQueryVariables = Exact<{ [key: string]: never; }>;
 
 

@@ -40,7 +40,7 @@ const ENDPOINTS: EndpointDef[] = [
     id: "contracts-list",
     resource: "Contracts",
     method: "GET",
-    path: "/api/contracts/",
+    path: "/api/ingest/contracts/",
     description: "List indexed contracts.",
     schema: "Query params: limit, offset",
   },
@@ -48,7 +48,7 @@ const ENDPOINTS: EndpointDef[] = [
     id: "contracts-create",
     resource: "Contracts",
     method: "POST",
-    path: "/api/contracts/",
+    path: "/api/ingest/contracts/",
     description: "Register a contract for indexing.",
     schema: '{"contract_id":"C...","label":"my-contract"}',
   },
@@ -56,7 +56,7 @@ const ENDPOINTS: EndpointDef[] = [
     id: "events-list",
     resource: "Events",
     method: "GET",
-    path: "/api/events/",
+    path: "/api/ingest/events/",
     description: "List indexed events.",
     schema: "Query params: contract_id, event_type, limit",
   },
@@ -64,7 +64,7 @@ const ENDPOINTS: EndpointDef[] = [
     id: "webhooks-list",
     resource: "Webhooks",
     method: "GET",
-    path: "/api/webhooks/",
+    path: "/api/ingest/webhooks/",
     description: "List webhook subscriptions.",
     schema: "No body",
   },
@@ -72,7 +72,7 @@ const ENDPOINTS: EndpointDef[] = [
     id: "webhooks-create",
     resource: "Webhooks",
     method: "POST",
-    path: "/api/webhooks/",
+    path: "/api/ingest/webhooks/",
     description: "Create a webhook subscription.",
     schema: '{"url":"https://example.com/webhook","event_type":"TRANSFER"}',
   },
@@ -331,7 +331,7 @@ export default function ApiExplorerPage() {
                     <pre className="border border-terminal-green/20 p-2 text-xs text-terminal-cyan overflow-x-auto whitespace-pre-wrap break-all">
                       {JSON.stringify(result.headers, null, 2)}
                     </pre>
-                    <pre className="border border-terminal-green/20 p-2 text-xs text-terminal-green overflow-x-auto whitespace-pre-wrap break-all">
+                    <pre className="border border-terminal-green/20 p-2 text-xs text-terminal-green overflow-x-auto whitespace-pre-wrap break-all max-h-[300px] overflow-y-auto">
                       {result.body || "(empty body)"}
                     </pre>
                   </>

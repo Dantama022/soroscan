@@ -307,7 +307,7 @@ const ResponsiveCard = React.forwardRef<
       // Handle Enter and Space keys for interactive cards
       if (isInteractive && (event.key === "Enter" || event.key === " ")) {
         event.preventDefault();
-        onClick?.(event as React.MouseEvent<HTMLDivElement>);
+        onClick?.(event as unknown as React.MouseEvent<HTMLDivElement>);
       }
 
       onKeyDown?.(event);

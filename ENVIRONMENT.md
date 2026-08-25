@@ -37,6 +37,7 @@ Tests using `soroscan.settings_test` do not require these variables because the 
 | `DEBUG`                  | Boolean              |       No | `False`                                    | Enables Django debug mode. Never enable it in production.                                                 |
 | `ALLOWED_HOSTS`          | Comma-separated list |       No | `localhost,127.0.0.1`                      | Host names accepted by Django.                                                                            |
 | `FRONTEND_BASE_URL`      | URL                  |       No | `http://localhost:3000`                    | Public frontend URL used by backend integrations.                                                         |
+| `ADMIN_URL_PATH`         | String               |       No | `admin/`                                   | Custom URL path for the Django admin portal. Obfuscate in production for security.                        |
 | `SOFTWARE_VERSION`       | String               |       No | Value from `VERSION.md`, otherwise `1.0.0` | Version exposed through API and platform metadata.                                                        |
 | `ENABLE_SILK`            | Boolean              |       No | `False`                                    | Enables the Django Silk profiler and middleware.                                                          |
 

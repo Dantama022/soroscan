@@ -29,6 +29,15 @@ const nextConfig: NextConfig = {
     // this when a remote image source (e.g. an avatar/CDN host) is added.
     remotePatterns: [],
   },
+  async rewrites() {
+    const backendBaseUrl = process.env.BACKEND_BASE_URL || 'http://localhost:8000';
+    return [
+      {
+        source: '/api/docs/:path*',
+        destination: `${backendBaseUrl}/api/docs/:path*`,
+      },
+    ];
+  },
 };
 
 export default withBundleAnalyzer(withNextIntl(nextConfig));

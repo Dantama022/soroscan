@@ -60,6 +60,11 @@ export const metadata: Metadata = {
     description: "The Graph for Soroban. Real-time event indexing for Stellar smart contracts.",
     images: ["/og-image.png"],
   },
+  icons: {
+    icon: "/soroscan-logo-dark.png",
+    shortcut: "/soroscan-logo-dark.png",
+    apple: "/soroscan-logo-dark.png",
+  },
   robots: { index: true, follow: true },
 }
 

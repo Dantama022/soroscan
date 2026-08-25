@@ -32,10 +32,15 @@ from soroscan.ingest.schema import schema
 from soroscan.dev_summary_view import dev_summary_view
 
 
+import os
+
 from .error_handlers import custom_404 as handler404_view, custom_500 as handler500_view
 
 handler404 = handler404_view
 handler500 = handler500_view
+
+raw_admin_path = os.getenv("ADMIN_URL_PATH", "").strip("/")
+admin_url_path = f"{raw_admin_path}/" if raw_admin_path else "admin/"
 
 urlpatterns = [
     # Prometheus metrics — must be unauthenticated; placed before any auth middleware
@@ -46,7 +51,7 @@ urlpatterns = [
     path("ready/", readiness_view, name="readiness"),
     path("api/health/workers/", worker_health_view, name="worker-health"),
 
-    path("admin/", admin.site.urls),
+    path(admin_url_path, admin.site.urls),
     path("api/audit-trail/", audit_trail_view, name="audit-trail"),
     path("api/contracts/status/", contract_status, name="contract-status"),
     path("api/analytics/rate-limits/", rate_limit_analytics_view, name="rate-limit-analytics"),

@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import type { Node, Edge } from "reactflow";
 import { MarkerType, type Node, type Edge } from "reactflow";
 import type { ContractWithDeps, VulnerabilitySeverity } from "./types";
 import { getWorstSeverity, severityNodeColor, generateMockContracts, MOCK_CONTRACTS } from "./types";
@@ -106,7 +105,6 @@ function buildNodes(
 
   const visibleIds = new Set(filtered.map((c) => c.id));
 
-  return filtered.map((contract, idx) => {
   return filtered.map((contract) => {
     const worstSeverity = getWorstSeverity(contract.vulnerabilities);
     const colors = severityNodeColor(worstSeverity);
@@ -188,7 +186,6 @@ function buildEdges(
           opacity: isDimmed ? 0.15 : 0.8,
         },
         markerEnd: {
-          type: "arrowclosed" as const,
           type: MarkerType.ArrowClosed,
           color: edgeColor,
         },

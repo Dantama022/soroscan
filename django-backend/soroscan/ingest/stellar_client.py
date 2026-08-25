@@ -163,21 +163,6 @@ class SorobanClient:
                 source_account=account,
                 network_passphrase=self.network_passphrase,
                 base_fee=100000,
-    def _simulate_contract_read(
-        self,
-        function_name: str,
-        parameters: list[SCVal],
-    ) -> tuple[bool, Any]:
-        """Simulate a read-only contract call and decode the return value."""
-        if not self.keypair:
-            return False, "No keypair configured for simulation"
-
-        try:
-            account = self.server.load_account(self.keypair.public_key)
-            tx_builder = TransactionBuilder(
-                source_account=account,
-                network_passphrase=self.network_passphrase,
-                base_fee=100,
             )
             tx_builder.append_invoke_contract_function_op(
                 contract_id=self.contract_id,
@@ -220,6 +205,47 @@ class SorobanClient:
                 error=str(exc),
             )
 
+    def _simulate_contract_read(
+        self,
+        function_name: str,
+        parameters: list[SCVal],
+    ) -> tuple[bool, Any]:
+        """Simulate a read-only contract call and decode the return value."""
+        if not self.keypair:
+            return False, "No keypair configured for simulation"
+
+        try:
+            account = self.server.load_account(self.keypair.public_key)
+            tx_builder = TransactionBuilder(
+                source_account=account,
+                network_passphrase=self.network_passphrase,
+                base_fee=100,
+            )
+            tx_builder.append_invoke_contract_function_op(
+                contract_id=self.contract_id,
+                function_name=function_name,
+                parameters=parameters,
+            )
+            tx = tx_builder.set_timeout(30).build()
+            simulate_response = self.server.simulate_transaction(tx)
+
+            if simulate_response.error:
+                return False, simulate_response.error
+
+            results = getattr(simulate_response, "results", None) or []
+            if not results:
+                return False, "No simulation result returned"
+
+            result_xdr = getattr(results[0], "xdr", None)
+            if not result_xdr:
+                return False, "Missing result XDR"
+
+            sc_val_obj = stellar_xdr.SCVal.from_xdr(result_xdr)
+            return True, scval.to_native(sc_val_obj)
+        except Exception as exc:
+            logger.exception("Failed to simulate contract read: %s", function_name)
+            return False, str(exc)
+
     def add_indexer(self, indexer_address: str) -> TransactionResult:
         """
         Submit an add_indexer transaction to the SoroScan contract (SC-9).
@@ -242,21 +268,7 @@ class SorobanClient:
                 self._address_to_sc_val(indexer_address),
             ],
             signer=admin_keypair,
-                return False, simulate_response.error
-
-            results = getattr(simulate_response, "results", None) or []
-            if not results:
-                return False, "No simulation result returned"
-
-            result_xdr = getattr(results[0], "xdr", None)
-            if not result_xdr:
-                return False, "Missing result XDR"
-
-            sc_val_obj = stellar_xdr.SCVal.from_xdr(result_xdr)
-            return True, scval.to_native(sc_val_obj)
-        except Exception as exc:
-            logger.exception("Failed to simulate contract read: %s", function_name)
-            return False, str(exc)
+        )
 
     def is_indexer(self, indexer_address: str) -> tuple[bool, Any]:
         """Query whether an address is an authorized indexer (SC-15)."""

@@ -44,8 +44,11 @@ export async function POST(request: Request): Promise<Response> {
   const canHaveBody = !["GET", "HEAD"].includes(method);
   const requestBody = canHaveBody ? payload.body ?? undefined : undefined;
 
+  const backendBase = process.env.BACKEND_BASE_URL || "http://web:8000";
+  const targetUrl = url.replace(/^https?:\/\/(localhost|127\.0\.0\.1):8000/, backendBase);
+
   try {
-    const upstream = await fetch(url, {
+    const upstream = await fetch(targetUrl, {
       method,
       headers: requestHeaders,
       body: requestBody,

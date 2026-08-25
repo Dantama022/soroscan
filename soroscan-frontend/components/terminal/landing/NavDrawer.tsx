@@ -28,7 +28,7 @@ export function NavDrawer({
   const navLinks = [
     { href: "/docs", label: t("docs") },
     { href: "/features", label: t("features") },
-    { href: "/api/docs/", label: "API_DOCS", external: true },
+    { href: "/developer/api-explorer", label: "API_Explorer" },
     { href: "https://github.com/SoroScan/soroscan", label: "GITHUB", external: true },
   ];
 

@@ -37,7 +37,8 @@ export function LanguageSelector() {
         value={locale}
         onChange={(event) => {
           const nextLocale = event.target.value as AppLocale
-          router.push(localizePathname(pathname, nextLocale))
+          document.cookie = `NEXT_LOCALE=${nextLocale};path=/;max-age=31536000;SameSite=Lax`
+          window.location.href = localizePathname(pathname, nextLocale)
         }}
         className="bg-transparent border border-terminal-gray/30 rounded-sm text-xs uppercase tracking-widest text-terminal-gray hover:text-terminal-green hover:border-terminal-green/30 transition-colors px-2 py-1 focus:outline-none focus:ring-1 focus:ring-terminal-green/50 font-terminal-mono"
       >

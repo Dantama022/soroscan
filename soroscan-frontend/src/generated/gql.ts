@@ -59,6 +59,10 @@ export function gql(source: "mutation RequestDataGDPRExport($organizationId: Str
 /**
  * The gql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function gql(source: "query SaveSearchPlaceholder {\n  me {\n    id\n    email\n  }\n}"): (typeof documents)["query SaveSearchPlaceholder {\n  me {\n    id\n    email\n  }\n}"];
+/**
+ * The gql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function gql(source: "mutation Login($email: String!, $password: String!) {\n  login(email: $email, password: $password) {\n    access\n    refresh\n    user {\n      id\n      email\n    }\n  }\n}\n\nmutation RefreshToken($refresh: String!) {\n  refreshToken(refresh: $refresh) {\n    access\n    refresh\n  }\n}"): (typeof documents)["mutation Login($email: String!, $password: String!) {\n  login(email: $email, password: $password) {\n    access\n    refresh\n    user {\n      id\n      email\n    }\n  }\n}\n\nmutation RefreshToken($refresh: String!) {\n  refreshToken(refresh: $refresh) {\n    access\n    refresh\n  }\n}"];
 /**
  * The gql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.

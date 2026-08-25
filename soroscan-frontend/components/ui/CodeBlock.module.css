@@ -1,17 +1,17 @@
 .block {
   background: #050810;
-  border: 1px solid rgba(0, 255, 65, 0.45);
+  border: 1px solid rgba(0, 229, 255, 0.3);
   border-radius: 4px;
   overflow: hidden;
   box-shadow:
-    0 0 0 1px rgba(0, 255, 156, 0.08),
-    0 0 24px rgba(0, 255, 65, 0.12);
+    0 0 0 1px rgba(0, 229, 255, 0.08),
+    0 0 24px rgba(0, 229, 255, 0.12);
   font-family: var(--font-jetbrains-mono, "JetBrains Mono", "IBM Plex Mono", monospace);
 }
 
 .header {
   background: #0d1120;
-  border-bottom: 1px solid rgba(0, 255, 65, 0.2);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.2);
   padding: 8px 12px;
   display: flex;
   align-items: center;
@@ -81,9 +81,9 @@
 .copyButton:hover,
 .copyButton:focus-visible {
   outline: none;
-  color: #00ff9c;
-  border-color: rgba(0, 255, 156, 0.55);
-  box-shadow: 0 0 12px rgba(0, 255, 156, 0.15);
+  color: #00e5ff;
+  border-color: rgba(0, 229, 255, 0.55);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.15);
 }
 
 .copyButtonInline {

@@ -139,18 +139,15 @@ export function AtomicTransactionTree({
     [events, rootEventId]
   );
 
-  const [nodes, , onNodesChange] = useNodesState<Node<CorrelationNodeData>>(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<CorrelationNodeData>>(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   // Re-initialise when events change
   React.useEffect(() => {
     const { nodes: n, edges: e } = buildLayout(events, rootEventId);
-    // useNodesState/useEdgesState don't expose a "reset" directly;
-    // we proxy through the callback form
-    onNodesChange(n.map((node) => ({ type: 'reset' as const, item: node })));
-    onEdgesChange(e.map((edge) => ({ type: 'reset' as const, item: edge })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, rootEventId]);
+    setNodes(n);
+    setEdges(e);
+  }, [events, rootEventId, setNodes, setEdges]);
 
   if (events.length === 0) {
     return (
