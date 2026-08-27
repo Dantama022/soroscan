@@ -57,11 +57,14 @@ from .models import (
 from .cache_utils import get_cached_contract
 from .serializers import (
     APIKeySerializer,
+    BulkMetadataImportSerializer,
     ContractEventSerializer,
     ContractInvocationSerializer,
     ContractSnapshotSerializer,
     ContractSourceSerializer,
     ContractVerificationSerializer,
+    EventDeduplicationConfigSerializer,
+    EventDeduplicationTestSerializer,
     EventSearchSerializer,
     EventsByContractsRequestSerializer,
     OrganizationBudgetSerializer,
@@ -74,6 +77,8 @@ from .serializers import (
     TeamSerializer,
     TrackedContractSerializer,
     WebhookDeliveryLogSerializer,
+    WebhookReplayJobSerializer,
+    WebhookReplayRequestSerializer,
     WebhookSubscriptionSerializer,
 )
 from .stellar_client import SorobanClient
@@ -131,6 +136,8 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
     ordering = ["-created_at"]
     action_throttle_scopes = {
         "stats": "contract_stats",
+        "bulk_import_metadata": "contract_bulk_import",
+        "dedup_test": "dedup_test",
     }
 
     @staticmethod
@@ -398,6 +405,162 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
 
         serializer = ContractVerificationSerializer(verification)
         return Response(serializer.data)
+
+    @extend_schema(
+        responses=EventDeduplicationConfigSerializer,
+        request=EventDeduplicationConfigSerializer,
+    )
+    @action(detail=True, methods=["get", "put", "patch"], url_path="dedup-config")
+    def dedup_config(self, request, pk=None):
+        """Get or update event deduplication field configuration (issue #1328)."""
+        from .models import EventDeduplicationConfig
+
+        contract = self.get_object()
+        if request.method == "GET":
+            config = getattr(contract, "dedup_config", None)
+            if config is None:
+                return Response({"enabled": False, "fields": []})
+            return Response(
+                EventDeduplicationConfigSerializer(
+                    {"enabled": config.enabled, "fields": config.fields or []}
+                ).data
+            )
+
+        if not request.user.is_staff and contract.owner_id != request.user.id:
+            return Response({"detail": "Admin or owner access required."}, status=403)
+
+        serializer = EventDeduplicationConfigSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        config, _ = EventDeduplicationConfig.objects.update_or_create(
+            contract=contract,
+            defaults={
+                "enabled": serializer.validated_data["enabled"],
+                "fields": serializer.validated_data["fields"],
+            },
+        )
+        return Response(
+            EventDeduplicationConfigSerializer(
+                {"enabled": config.enabled, "fields": config.fields or []}
+            ).data
+        )
+
+    @extend_schema(
+        request=EventDeduplicationTestSerializer,
+        responses={
+            200: inline_serializer(
+                name="DedupTestResponse",
+                fields={
+                    "dedup_enabled": serializers.BooleanField(),
+                    "dedup_hash": serializers.CharField(required=False),
+                    "material": serializers.JSONField(required=False),
+                    "fields": serializers.ListField(
+                        child=serializers.CharField(), required=False
+                    ),
+                },
+            )
+        },
+    )
+    @action(detail=True, methods=["post"], url_path="dedup-test")
+    def dedup_test(self, request, pk=None):
+        """Test dedup fingerprint computation for a sample event (issue #1328)."""
+        from soroscan.ingest.services.event_dedup import fingerprint_event
+
+        contract = self.get_object()
+        config = getattr(contract, "dedup_config", None)
+        if not config or not config.enabled:
+            return Response({"dedup_enabled": False})
+
+        serializer = EventDeduplicationTestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        payload = data.get("payload") or {}
+        raw = {
+            "event_type": data.get("event_type"),
+            "ledger": data.get("ledger"),
+            "event_index": data.get("event_index"),
+            "tx_hash": data.get("tx_hash"),
+            "payload": payload,
+        }
+        dedup_hash, material = fingerprint_event(
+            config.fields or [],
+            event_type=data.get("event_type"),
+            ledger=data.get("ledger"),
+            event_index=data.get("event_index"),
+            tx_hash=data.get("tx_hash"),
+            payload=payload,
+            raw=raw,
+        )
+        return Response(
+            {
+                "dedup_enabled": True,
+                "dedup_hash": dedup_hash,
+                "material": material,
+                "fields": config.fields or [],
+            }
+        )
+
+    @extend_schema(
+        request=BulkMetadataImportSerializer,
+        responses={
+            200: inline_serializer(
+                name="BulkMetadataImportResponse",
+                fields={
+                    "mode": serializers.CharField(),
+                    "created": serializers.IntegerField(),
+                    "updated": serializers.IntegerField(),
+                    "errors": serializers.IntegerField(),
+                },
+            )
+        },
+    )
+    @action(detail=False, methods=["post"], url_path="metadata/bulk-import")
+    def bulk_import_metadata(self, request):
+        """
+        Bulk import contract metadata from CSV or JSON (issue #1327).
+
+        Accepts multipart file upload (``file``) or raw ``content`` string.
+        """
+        from soroscan.ingest.services.metadata_bulk_import import (
+            BulkImportError,
+            detect_format,
+            import_metadata_rows,
+            parse_rows,
+        )
+
+        if not request.user.is_staff:
+            return Response({"detail": "Admin access required."}, status=403)
+
+        serializer = BulkMetadataImportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        dry_run = serializer.validated_data.get("dry_run", False)
+        on_error = serializer.validated_data.get("on_error", "rollback")
+
+        upload = request.FILES.get("file")
+        raw = serializer.validated_data.get("content") or ""
+        filename = None
+        if upload is not None:
+            raw = upload.read().decode("utf-8")
+            filename = getattr(upload, "name", None)
+
+        if not raw.strip():
+            return Response(
+                {"detail": "Provide a CSV/JSON file or content body."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            fmt = detect_format(filename, serializer.validated_data.get("format"))
+            rows = parse_rows(raw, fmt)
+            report = import_metadata_rows(rows, dry_run=dry_run, on_error=on_error)
+        except BulkImportError as exc:
+            return Response(
+                {"detail": str(exc), "report": exc.report},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(report)
 
 
 class ContractEventViewSet(viewsets.ReadOnlyModelViewSet):
@@ -684,6 +847,9 @@ class WebhookSubscriptionViewSet(viewsets.ModelViewSet):
 
     queryset = WebhookSubscription.objects.all()
     serializer_class = WebhookSubscriptionSerializer
+    action_throttle_scopes = {
+        "replay": "webhook_replay",
+    }
 
     def get_queryset(self):
         # Public read access, but filter by owner for write operations
@@ -869,6 +1035,78 @@ class WebhookSubscriptionViewSet(viewsets.ModelViewSet):
 
         serializer = WebhookDeliveryLogSerializer(qs, many=True)
         return Response(serializer.data)
+
+    @extend_schema(
+        request=WebhookReplayRequestSerializer,
+        responses={202: WebhookReplayJobSerializer},
+    )
+    @action(detail=True, methods=["post"])
+    def replay(self, request, pk=None):
+        """
+        Replay historical events to this webhook with filters (issue #1329).
+
+        Creates a WebhookReplayJob, rate-limits dispatch, and tracks status.
+        """
+        from soroscan.ingest.services.webhook_replay import create_replay_job
+        from .tasks import run_webhook_replay_job
+
+        webhook = self.get_object()
+        if (
+            not request.user.is_staff
+            and webhook.contract.owner_id != getattr(request.user, "id", None)
+        ):
+            return Response({"detail": "Permission denied."}, status=403)
+
+        serializer = WebhookReplayRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            job = create_replay_job(
+                subscription=webhook,
+                requested_by=request.user if request.user.is_authenticated else None,
+                contract_id=data.get("contract_id") or webhook.contract.contract_id,
+                event_type=data.get("event_type") or None,
+                from_date=data.get("from_date") or None,
+                to_date=data.get("to_date") or None,
+                from_ledger=data.get("from_ledger"),
+                to_ledger=data.get("to_ledger"),
+                limit=data.get("limit", 100),
+                rate_limit_per_second=data.get("rate_limit_per_second", 5.0),
+                dry_run=data.get("dry_run", False),
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        run_webhook_replay_job.delay(job.id)
+        return Response(
+            WebhookReplayJobSerializer(job.to_status_dict()).data,
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @extend_schema(responses=WebhookReplayJobSerializer)
+    @action(detail=True, methods=["get"], url_path=r"replay/(?P<job_id>[^/.]+)")
+    def replay_status(self, request, pk=None, job_id=None):
+        """Return status for a webhook replay job (issue #1329)."""
+        from .models import WebhookReplayJob
+
+        webhook = self.get_object()
+        job = get_object_or_404(
+            WebhookReplayJob, pk=job_id, subscription=webhook
+        )
+        return Response(WebhookReplayJobSerializer(job.to_status_dict()).data)
+
+    @extend_schema(responses=WebhookReplayJobSerializer(many=True))
+    @action(detail=True, methods=["get"], url_path="replays")
+    def replays(self, request, pk=None):
+        """List replay jobs for a webhook subscription."""
+        from .models import WebhookReplayJob
+
+        webhook = self.get_object()
+        jobs = WebhookReplayJob.objects.filter(subscription=webhook).order_by("-created_at")[:50]
+        return Response(
+            [WebhookReplayJobSerializer(j.to_status_dict()).data for j in jobs]
+        )
 
 
 class TeamViewSet(viewsets.ModelViewSet):

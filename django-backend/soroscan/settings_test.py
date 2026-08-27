@@ -139,6 +139,11 @@ REST_FRAMEWORK = {
         "user": "10000/hour",
         "ingest": "100/hour",
         "graphql": "500/hour",
+        "webhook_replay": "1000/hour",
+        "contract_bulk_import": "1000/hour",
+        "dedup_test": "1000/hour",
+        "events_search": "1000/hour",
+        "contract_stats": "1000/hour",
     },
 }
 

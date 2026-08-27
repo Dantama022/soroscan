@@ -761,3 +761,81 @@ class EventsByContractsRequestSerializer(serializers.Serializer):
     page = serializers.IntegerField(default=1, min_value=1, help_text="Page number")
     page_size = serializers.IntegerField(default=20, min_value=1, max_value=100, help_text="Page size")
 
+
+class WebhookReplayRequestSerializer(serializers.Serializer):
+    """Request body for POST /webhooks/{id}/replay/ and contract-scoped replay."""
+
+    contract_id = serializers.CharField(required=False, allow_blank=True)
+    event_type = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    from_date = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    to_date = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    from_ledger = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    to_ledger = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    limit = serializers.IntegerField(required=False, default=100, min_value=0, max_value=10000)
+    rate_limit_per_second = serializers.FloatField(
+        required=False, default=5.0, min_value=0.1, max_value=100.0
+    )
+    dry_run = serializers.BooleanField(required=False, default=False)
+
+
+class WebhookReplayJobSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    status = serializers.CharField()
+    contract_id = serializers.CharField()
+    subscription_id = serializers.IntegerField(allow_null=True)
+    filters = serializers.JSONField()
+    rate_limit_per_second = serializers.FloatField()
+    dry_run = serializers.BooleanField()
+    total_events = serializers.IntegerField()
+    processed_events = serializers.IntegerField()
+    succeeded = serializers.IntegerField()
+    failed = serializers.IntegerField()
+    skipped = serializers.IntegerField()
+    error_message = serializers.CharField(allow_blank=True)
+    result = serializers.JSONField()
+    created_at = serializers.CharField(allow_null=True)
+    started_at = serializers.CharField(allow_null=True)
+    finished_at = serializers.CharField(allow_null=True)
+    updated_at = serializers.CharField(allow_null=True)
+
+
+class EventDeduplicationConfigSerializer(serializers.Serializer):
+    enabled = serializers.BooleanField(default=True)
+    fields = serializers.ListField(
+        child=serializers.CharField(max_length=128),
+        allow_empty=True,
+        help_text="Fields / special tokens used for the dedup fingerprint",
+    )
+
+    def validate_fields(self, value):
+        cleaned = []
+        for item in value:
+            name = str(item).strip()
+            if not name:
+                continue
+            if len(name) > 128:
+                raise serializers.ValidationError(f"Field name too long: {name}")
+            cleaned.append(name)
+        return cleaned
+
+
+class EventDeduplicationTestSerializer(serializers.Serializer):
+    event_type = serializers.CharField(required=False, allow_blank=True)
+    ledger = serializers.IntegerField(required=False, allow_null=True)
+    event_index = serializers.IntegerField(required=False, allow_null=True)
+    tx_hash = serializers.CharField(required=False, allow_blank=True)
+    payload = serializers.JSONField(required=False, default=dict)
+
+
+class BulkMetadataImportSerializer(serializers.Serializer):
+    format = serializers.ChoiceField(choices=["csv", "json"], required=False)
+    dry_run = serializers.BooleanField(required=False, default=False)
+    on_error = serializers.ChoiceField(
+        choices=["rollback", "skip"], required=False, default="rollback"
+    )
+    content = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Raw CSV/JSON body when not uploading a file",
+    )
+

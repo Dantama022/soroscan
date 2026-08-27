@@ -954,6 +954,103 @@ class WebhookSubscription(models.Model):
         super().save(*args, **kwargs)
 
 
+class WebhookReplayJob(models.Model):
+    """
+    Tracks an asynchronous webhook replay request with filters and progress.
+
+    Issue #1329 — replay endpoint with filtering, rate limiting, and status tracking.
+    """
+
+    STATUS_PENDING = "pending"
+    STATUS_RUNNING = "running"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_RUNNING, "Running"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    subscription = models.ForeignKey(
+        "WebhookSubscription",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="replay_jobs",
+        help_text="Optional specific subscription; when null, all active webhooks for the contract",
+    )
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="webhook_replay_jobs",
+    )
+    contract_id = models.CharField(max_length=56, db_index=True)
+    filters = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Replay filters: event_type, from_date, to_date, ledgers, limit, dry_run",
+    )
+    rate_limit_per_second = models.FloatField(
+        default=5.0,
+        help_text="Max webhook dispatches per second during replay",
+    )
+    dry_run = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+    total_events = models.PositiveIntegerField(default=0)
+    processed_events = models.PositiveIntegerField(default=0)
+    succeeded = models.PositiveIntegerField(default=0)
+    failed = models.PositiveIntegerField(default=0)
+    skipped = models.PositiveIntegerField(default=0)
+    result = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["contract_id", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"WebhookReplayJob({self.pk}, {self.status}, {self.contract_id})"
+
+    def to_status_dict(self) -> dict:
+        return {
+            "id": self.pk,
+            "status": self.status,
+            "contract_id": self.contract_id,
+            "subscription_id": self.subscription_id,
+            "filters": self.filters,
+            "rate_limit_per_second": self.rate_limit_per_second,
+            "dry_run": self.dry_run,
+            "total_events": self.total_events,
+            "processed_events": self.processed_events,
+            "succeeded": self.succeeded,
+            "failed": self.failed,
+            "skipped": self.skipped,
+            "error_message": self.error_message,
+            "result": self.result,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class WebhookDeliveryLog(models.Model):
     """
     Immutable audit log for every webhook dispatch attempt.
@@ -1437,9 +1534,17 @@ class RemediationRule(models.Model):
 
     CONDITION_NO_EVENTS = "no_events_for_minutes"
     CONDITION_DECODE_ERROR_SPIKE = "decode_error_spike"
+    CONDITION_INGESTION_LAG = "event_ingestion_lag"
+    CONDITION_WEBHOOK_FAILURE_BURST = "webhook_delivery_failure_burst"
+    CONDITION_DB_POOL_EXHAUSTED = "database_connection_pool_exhausted"
+    CONDITION_RPC_UNAVAILABLE = "rpc_endpoint_unavailable"
     CONDITION_CHOICES = [
         (CONDITION_NO_EVENTS, "No events for N minutes"),
         (CONDITION_DECODE_ERROR_SPIKE, "Decode error spike"),
+        (CONDITION_INGESTION_LAG, "Event ingestion lag"),
+        (CONDITION_WEBHOOK_FAILURE_BURST, "Webhook delivery failure burst"),
+        (CONDITION_DB_POOL_EXHAUSTED, "Database connection pool exhausted"),
+        (CONDITION_RPC_UNAVAILABLE, "RPC endpoint unavailable"),
     ]
 
     ALERT_SLACK = "slack"

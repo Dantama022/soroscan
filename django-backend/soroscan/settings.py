@@ -253,6 +253,9 @@ REST_FRAMEWORK = {
         "graphql": RATE_LIMIT_GRAPHQL,
         "events_search": ENDPOINT_RATE_LIMIT_SEARCH,
         "contract_stats": ENDPOINT_RATE_LIMIT_STATS,
+        "webhook_replay": "10/hour",
+        "contract_bulk_import": "20/hour",
+        "dedup_test": "60/hour",
     },
 }
 

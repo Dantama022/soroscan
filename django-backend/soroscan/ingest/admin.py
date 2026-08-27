@@ -13,7 +13,6 @@ import csv
 import json
 from datetime import datetime, timedelta
 import requests as http_requests
-import hashlib
 
 from .models import (
     AlertExecution,
@@ -1405,6 +1404,63 @@ class ContractMetadataAdmin(AdminAuditMixin, admin.ModelAdmin):
     search_fields = ["name", "description", "tags"]
     list_filter = [TagListFilter]
     readonly_fields = ["created_at", "updated_at"]
+    change_list_template = "admin/ingest/contractmetadata/change_list.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "bulk-import/",
+                self.admin_site.admin_view(self.bulk_import_view),
+                name="soroscan_contractmetadata_bulk_import",
+            ),
+        ]
+        return custom + urls
+
+    def bulk_import_view(self, request):
+        from django.contrib import messages
+        from django.shortcuts import render
+        from soroscan.ingest.services.metadata_bulk_import import (
+            BulkImportError,
+            detect_format,
+            import_metadata_rows,
+            parse_rows,
+        )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Bulk import contract metadata",
+            "opts": self.model._meta,
+        }
+
+        if request.method == "POST":
+            upload = request.FILES.get("file")
+            fmt = request.POST.get("format") or None
+            dry_run = request.POST.get("dry_run") == "on"
+            on_error = request.POST.get("on_error") or "rollback"
+            if not upload:
+                messages.error(request, "Upload a CSV or JSON file.")
+                return render(request, "admin/ingest/contractmetadata/bulk_import.html", context)
+
+            raw = upload.read().decode("utf-8")
+            try:
+                detected = detect_format(upload.name, fmt)
+                rows = parse_rows(raw, detected)
+                report = import_metadata_rows(rows, dry_run=dry_run, on_error=on_error)
+                context["report"] = report
+                messages.success(
+                    request,
+                    f"Import finished ({report['mode']}): "
+                    f"created={report['created']} updated={report['updated']} errors={report['errors']}",
+                )
+            except (BulkImportError, ValueError) as exc:
+                report = getattr(exc, "report", None)
+                context["report"] = report
+                messages.error(request, str(exc))
+
+            return render(request, "admin/ingest/contractmetadata/bulk_import.html", context)
+
+        return render(request, "admin/ingest/contractmetadata/bulk_import.html", context)
 
 
 @admin.register(ContractSource)
@@ -1494,9 +1550,32 @@ class ContractABIVersionAdmin(admin.ModelAdmin):
 
 @admin.register(EventDeduplicationConfig)
 class EventDeduplicationConfigAdmin(AdminAuditMixin, admin.ModelAdmin):
-    list_display = ["contract", "enabled", "updated_at"]
+    list_display = ["contract", "enabled", "fields_preview", "updated_at"]
     search_fields = ["contract__name", "contract__contract_id"]
-    readonly_fields = ["created_at", "updated_at"]
+    readonly_fields = ["created_at", "updated_at", "test_panel"]
+    fields = ["contract", "enabled", "fields", "test_panel", "created_at", "updated_at"]
+    change_form_template = "admin/ingest/eventdeduplicationconfig/change_form.html"
+
+    def fields_preview(self, obj):
+        fields = obj.fields or []
+        preview = ", ".join(fields[:6])
+        if len(fields) > 6:
+            preview += "…"
+        return preview or "—"
+
+    fields_preview.short_description = "Fields"
+
+    def test_panel(self, obj):
+        if not obj or not obj.pk:
+            return "Save the config before testing."
+        return (
+            f"POST JSON sample events to "
+            f"/admin/ingest/eventdeduplicationconfig/test/{obj.contract_id}/ "
+            f"or use the REST endpoint "
+            f"/api/ingest/contracts/{obj.contract_id}/dedup-test/"
+        )
+
+    test_panel.short_description = "Testing"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -1510,10 +1589,16 @@ class EventDeduplicationConfigAdmin(AdminAuditMixin, admin.ModelAdmin):
         return custom + urls
 
     def test_dedup_view(self, request, contract_id):
+        from soroscan.ingest.services.event_dedup import fingerprint_event
+
         try:
             contract = TrackedContract.objects.get(pk=contract_id)
         except TrackedContract.DoesNotExist:
-            return HttpResponse(json.dumps({"error": "contract not found"}), content_type="application/json", status=404)
+            return HttpResponse(
+                json.dumps({"error": "contract not found"}),
+                content_type="application/json",
+                status=404,
+            )
 
         try:
             body = request.body.decode("utf-8") if request.body else "{}"
@@ -1523,17 +1608,20 @@ class EventDeduplicationConfigAdmin(AdminAuditMixin, admin.ModelAdmin):
 
         config = getattr(contract, "dedup_config", None)
         if not config or not config.enabled:
-            return HttpResponse(json.dumps({"dedup_enabled": False}), content_type="application/json")
+            return HttpResponse(
+                json.dumps({"dedup_enabled": False}),
+                content_type="application/json",
+            )
 
-        material = {}
-        for f in config.fields:
-            if f in ("event_type", "ledger", "event_index", "tx_hash"):
-                material[f] = payload.get(f)
-            else:
-                material[f] = payload.get("payload", {}).get(f)
-
-        dedup_material = json.dumps(material, sort_keys=True, default=str)
-        dedup_hash = hashlib.sha256(dedup_material.encode("utf-8")).hexdigest()
+        dedup_hash, material = fingerprint_event(
+            config.fields or [],
+            event_type=payload.get("event_type"),
+            ledger=payload.get("ledger"),
+            event_index=payload.get("event_index"),
+            tx_hash=payload.get("tx_hash"),
+            payload=payload.get("payload") if isinstance(payload.get("payload"), dict) else {},
+            raw=payload if isinstance(payload, dict) else {},
+        )
 
         return HttpResponse(
             json.dumps({"dedup_hash": dedup_hash, "material": material}),
