@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Activity,
   Radio,
+  Globe2,
   FileCode2,
   Webhook,
   Settings,
@@ -25,6 +26,7 @@ import { useTheme } from "@/hooks/useTheme";
 const navItems = [
   { href: "/dashboard", label: "Events", icon: LayoutDashboard },
   { href: "/performance", label: "Performance", icon: Activity },
+  { href: "/dashboard/ha", label: "Multi-Region", icon: Globe2 },
   { href: "/live", label: "Live Stream", icon: Radio },
   { href: "/contracts", label: "Contracts", icon: FileCode2 },
   { href: "/webhooks", label: "Webhooks", icon: Webhook },
@@ -37,21 +39,32 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
+/**
+ * Resolve which nav entry the current route belongs to.
+ *
+ * Nested routes (e.g. /dashboard/ha) match more than one entry by prefix, so
+ * the longest match wins and only one link is marked as the current page.
+ */
+function resolveActiveHref(pathname: string): string | undefined {
+  return navItems
+    .map((item) => item.href as string)
+    .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
+    .sort((a, b) => b.length - a.length)[0];
+}
+
 function NavLink({
   href,
   label,
   icon: Icon,
-  pathname,
+  isActive,
   onNavigate,
 }: {
   href: string;
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  pathname: string;
+  isActive: boolean;
   onNavigate?: () => void;
 }) {
-  const isActive = pathname === href || pathname.startsWith(`${href}/`);
-
   return (
     <Link
       href={href}
@@ -80,6 +93,8 @@ function SidebarNav({
   onNavigate?: () => void;
   className?: string;
 }) {
+  const activeHref = resolveActiveHref(pathname);
+
   return (
     <nav
       className={cn("flex flex-col gap-1", className)}
@@ -89,7 +104,7 @@ function SidebarNav({
         <NavLink
           key={item.href}
           {...item}
-          pathname={pathname}
+          isActive={item.href === activeHref}
           onNavigate={onNavigate}
         />
       ))}
