@@ -139,6 +139,7 @@ REST_FRAMEWORK = {
         "user": "10000/hour",
         "ingest": "100/hour",
         "graphql": "500/hour",
+        "unauthenticated_ip": "30/minute",
     },
 }
 

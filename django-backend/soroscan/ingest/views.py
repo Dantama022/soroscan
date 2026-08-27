@@ -27,7 +27,7 @@ from rest_framework.pagination import PageNumberPagination
 
 import requests as http_requests
 
-from soroscan.throttles import IngestRateThrottle
+from soroscan.throttles import IngestRateThrottle, UnauthenticatedIPRateThrottle
 from soroscan.webhook_signing import build_x_signature_header, public_key_base64
 
 from .cache_utils import cache_result, get_or_set_json, query_cache_ttl, stable_cache_key
@@ -1251,6 +1251,7 @@ def get_admin_view(request):
 )
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@throttle_classes([UnauthenticatedIPRateThrottle])
 def webhook_signing_public_key_view(request):
     """Return the platform Ed25519 public key used for webhook X-Signature headers."""
     return Response(
@@ -1274,7 +1275,7 @@ def webhook_signing_public_key_view(request):
 )
 @api_view(["GET"])
 @permission_classes([AllowAny])
-@throttle_classes([])
+@throttle_classes([UnauthenticatedIPRateThrottle])
 def health_check(request):
     """Health check endpoint."""
     return Response({"status": "healthy", "service": "soroscan"})
@@ -1300,6 +1301,7 @@ def health_check(request):
 )
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@throttle_classes([UnauthenticatedIPRateThrottle])
 def networks_view(request):
     """Return the list of Soroban networks supported by this indexer."""
     networks = getattr(settings, "SOROBAN_NETWORKS", [])

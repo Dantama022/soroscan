@@ -221,6 +221,7 @@ RATE_LIMIT_INGEST = env("RATE_LIMIT_INGEST", default="10/minute")
 RATE_LIMIT_GRAPHQL = env("RATE_LIMIT_GRAPHQL", default="60/minute")
 ENDPOINT_RATE_LIMIT_SEARCH = env("ENDPOINT_RATE_LIMIT_SEARCH", default="30/minute")
 ENDPOINT_RATE_LIMIT_STATS = env("ENDPOINT_RATE_LIMIT_STATS", default="100/minute")
+RATE_LIMIT_UNAUTHENTICATED_IP = env("RATE_LIMIT_UNAUTHENTICATED_IP", default="30/minute")
 
 # REST Framework
 REST_FRAMEWORK = {
@@ -253,6 +254,7 @@ REST_FRAMEWORK = {
         "graphql": RATE_LIMIT_GRAPHQL,
         "events_search": ENDPOINT_RATE_LIMIT_SEARCH,
         "contract_stats": ENDPOINT_RATE_LIMIT_STATS,
+        "unauthenticated_ip": RATE_LIMIT_UNAUTHENTICATED_IP,
     },
 }
 
