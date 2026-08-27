@@ -12,6 +12,7 @@ from .models import (
     APIKey,
     ContractEvent,
     ContractInvocation,
+    ContractMetadata,
     ContractSnapshot,
     ContractSource,
     ContractVerification,
@@ -760,4 +761,37 @@ class EventsByContractsRequestSerializer(serializers.Serializer):
     )
     page = serializers.IntegerField(default=1, min_value=1, help_text="Page number")
     page_size = serializers.IntegerField(default=20, min_value=1, max_value=100, help_text="Page size")
+
+
+class ContractMetadataSerializer(serializers.ModelSerializer):
+    """Serializer for ContractMetadata model."""
+
+    contract_id = serializers.CharField(source="contract.contract_id", read_only=True)
+
+    class Meta:
+        model = ContractMetadata
+        fields = [
+            "id",
+            "contract_id",
+            "name",
+            "description",
+            "tags",
+            "documentation_url",
+            "github_repo",
+            "team_email",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class BulkContractMetadataRequestSerializer(serializers.Serializer):
+    """Request serializer for bulk contract metadata retrieval."""
+
+    contract_ids = serializers.ListField(
+        child=serializers.CharField(max_length=56),
+        min_length=1,
+        max_length=50,
+        help_text="List of contract IDs (max 50).",
+    )
 

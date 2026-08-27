@@ -2434,6 +2434,44 @@ def contract_identity_view(request):
     })
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([UserRateThrottle])
+def bulk_contract_metadata_view(request):
+    """
+    POST /api/ingest/contracts/metadata/bulk/
+
+    Accepts a list of contract IDs and returns metadata for each.
+    Maximum 50 contract IDs per request.
+    """
+    from .models import ContractMetadata
+    from .serializers import BulkContractMetadataRequestSerializer, ContractMetadataSerializer
+
+    req_serializer = BulkContractMetadataRequestSerializer(data=request.data)
+    req_serializer.is_valid(raise_exception=True)
+    contract_ids = req_serializer.validated_data["contract_ids"]
+
+    metadata_qs = ContractMetadata.objects.select_related("contract").filter(
+        contract__contract_id__in=contract_ids
+    )
+    metadata_map = {m.contract.contract_id: m for m in metadata_qs}
+
+    results = []
+    missing = []
+    for cid in contract_ids:
+        if cid in metadata_map:
+            results.append(ContractMetadataSerializer(metadata_map[cid]).data)
+        else:
+            missing.append(cid)
+
+    return Response({
+        "results": results,
+        "missing": missing,
+        "total_found": len(results),
+        "total_missing": len(missing),
+    })
+
+
 # ---------------------------------------------------------------------------
 # Issue #491: EXPLAIN ANALYZE endpoint for query debugging
 # ---------------------------------------------------------------------------
