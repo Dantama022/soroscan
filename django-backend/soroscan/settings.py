@@ -177,6 +177,20 @@ if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
             ),
         }
     )
+    DATABASE_STATEMENT_TIMEOUT = env.int(
+        "DATABASE_STATEMENT_TIMEOUT", default=5000
+    )
+    current_options = DATABASES["default"]["OPTIONS"].get("options", "")
+    timeout_flag = f"-c statement_timeout={DATABASE_STATEMENT_TIMEOUT}"
+    DATABASES["default"]["OPTIONS"]["options"] = (
+        f"{current_options} {timeout_flag}".strip()
+        if current_options
+        else timeout_flag
+    )
+else:
+    DATABASE_STATEMENT_TIMEOUT = env.int(
+        "DATABASE_STATEMENT_TIMEOUT", default=5000
+    )
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [

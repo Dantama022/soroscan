@@ -92,6 +92,9 @@ DATABASES = {
     }
 }
 
+# PostgreSQL statement timeout in milliseconds (issue #1007).
+DATABASE_STATEMENT_TIMEOUT = 5000
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = []
 
