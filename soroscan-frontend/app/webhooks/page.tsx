@@ -8,6 +8,7 @@ import { Button } from "@/components/terminal/Button"
 import { Modal } from "@/components/terminal/Modal"
 import { WebhookTable } from "./components/WebhookTable"
 import { CreateWebhookModal } from "./components/CreateWebhookModal"
+import { useToast } from "@/context/ToastContext"
 import { MOCK_WEBHOOKS } from "./mock-data"
 import type { Webhook } from "./types"
 
@@ -21,7 +22,7 @@ export default function WebhooksPage() {
   const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null)
   const [testingId, setTestingId] = React.useState<string | null>(null)
   const [testResult, setTestResult] = React.useState<{ id: string; ok: boolean; code: number } | null>(null)
-  const [toast, setToast] = React.useState<string | null>(null)
+  const { showToast } = useToast()
 
   // Stats
   const active  = webhooks.filter((w) => w.status === "ACTIVE").length
@@ -35,11 +36,6 @@ export default function WebhooksPage() {
     .sort()
     .at(-1)
 
-  const showToast = (msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
-  }
-
   const handleCreate = (data: Omit<Webhook, "id" | "createdAt" | "totalDeliveries" | "secret" | "successRate">) => {
     const newWh: Webhook = {
       ...data,
@@ -50,7 +46,7 @@ export default function WebhooksPage() {
       secret: `whsec_${Math.random().toString(36).slice(2, 14)}`,
     }
     setWebhooks((prev) => [newWh, ...prev])
-    showToast("WEBHOOK_CREATED — subscription is now active")
+    showToast("Subscription is now active.", "success", "WEBHOOK_CREATED")
   }
 
   const handleDelete = (id: string) => setDeleteTarget(id)
@@ -59,7 +55,7 @@ export default function WebhooksPage() {
     if (!deleteTarget) return
     setWebhooks((prev) => prev.filter((w) => w.id !== deleteTarget))
     setDeleteTarget(null)
-    showToast("WEBHOOK_DELETED — subscription removed")
+    showToast("Subscription removed.", "success", "WEBHOOK_DELETED")
   }
 
   const handleTest = (id: string) => {
@@ -209,14 +205,6 @@ export default function WebhooksPage() {
           </div>
         </div>
       </Modal>
-
-      {/* Toast notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-100 border border-terminal-green bg-terminal-black px-4 py-3 text-xs text-terminal-green font-terminal-mono shadow-glow-green animate-in slide-in-from-bottom-4 duration-300 max-w-sm">
-          <span className="mr-2 text-terminal-green">✓</span>
-          {toast}
-        </div>
-      )}
     </div>
   )
 }

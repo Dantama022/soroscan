@@ -11,6 +11,9 @@ export interface ToastAction {
   onClick: () => void
 }
 
+/** Default auto-dismiss delay for a toast, in milliseconds. */
+export const DEFAULT_TOAST_DURATION_MS = 5000
+
 export interface ToastOptions {
   message: string
   type?: ToastType
@@ -33,6 +36,7 @@ interface ToastContextValue {
 export interface ToastProviderProps {
   children: React.ReactNode
   position?: "top-right" | "bottom-right"
+  /** Auto-dismiss duration in milliseconds. Set to 0 to disable auto-dismiss. */
   duration?: number
 }
 
@@ -60,7 +64,11 @@ const toastIcons = {
   warning: AlertTriangle,
 }
 
-export function ToastProvider({ children, position = "bottom-right", duration = 4000 }: ToastProviderProps) {
+export function ToastProvider({
+  children,
+  position = "bottom-right",
+  duration = DEFAULT_TOAST_DURATION_MS,
+}: ToastProviderProps) {
   const [toasts, setToasts] = React.useState<Toast[]>([])
 
   const dismissToast = React.useCallback((id: string) => {

@@ -2,12 +2,12 @@ name: Soroban Contract CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - 'soroban-contracts/**'
       - '.github/workflows/soroban.yml'
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - 'soroban-contracts/**'
       - '.github/workflows/soroban.yml'

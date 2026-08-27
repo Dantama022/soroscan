@@ -2,14 +2,14 @@ name: Failover Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "failover-tests/**"
       - "django-backend/soroscan/ingest/tests/test_failover.py"
       - "django-backend/soroscan/health.py"
       - ".github/workflows/failover-tests.yml"
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "failover-tests/**"
       - "django-backend/soroscan/ingest/tests/test_failover.py"

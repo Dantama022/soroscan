@@ -9,6 +9,7 @@ import {
 import "@testing-library/jest-dom"
 
 import {
+  DEFAULT_TOAST_DURATION_MS,
   ToastProvider,
   showToast,
   useToast,
@@ -106,9 +107,9 @@ describe("Toast system", () => {
     expect(container).toHaveClass("top-4", "right-4")
   })
 
-  it("auto-dismisses after four seconds", () => {
+  it("auto-dismisses after five seconds by default", () => {
     render(
-      <ToastProvider duration={4000}>
+      <ToastProvider>
         <ToastTrigger />
       </ToastProvider>,
     )
@@ -120,7 +121,7 @@ describe("Toast system", () => {
     expect(screen.getByText("Test Title")).toBeInTheDocument()
 
     act(() => {
-      jest.advanceTimersByTime(3999)
+      jest.advanceTimersByTime(DEFAULT_TOAST_DURATION_MS - 1)
     })
 
     expect(screen.getByText("Test Title")).toBeInTheDocument()

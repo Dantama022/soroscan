@@ -35,7 +35,7 @@ test.describe("Authentication", () => {
 
     await expect(page).toHaveURL(/\/dashboard(?:\/)?$/, { timeout: 20_000 });
     await expect(
-      page.getByText(/PERFORMANCE_DASHBOARD|MULTI_REGION_HA_DASHBOARD/i),
+      page.getByRole("heading", { name: /Event Explorer/i }),
     ).toBeVisible();
   });
 

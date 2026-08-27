@@ -2,14 +2,14 @@ name: Pact Contract Tests
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, dev]
     paths:
       - "pacts/**"
       - "sdk/**"
       - "django-backend/**"
       - ".github/workflows/pact-tests.yml"
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev]
     paths:
       - "pacts/**"
       - "sdk/**"
