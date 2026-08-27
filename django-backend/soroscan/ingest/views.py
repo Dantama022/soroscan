@@ -3184,3 +3184,107 @@ class AnalyticsViewSet(viewsets.ViewSet):
             for row in qs.iterator(chunk_size=2000)
         ]
         return Response({"range_days": range_days, "data": data})
+
+
+# ---------------------------------------------------------------------------
+# Dead Letter Queue — query + replay (issue #1311)
+# ---------------------------------------------------------------------------
+
+
+@extend_schema(
+    responses=inline_serializer(
+        name="DLQEntrySerializer",
+        fields={
+            "id": serializers.IntegerField(),
+            "subscription_id": serializers.IntegerField(),
+            "event_id": serializers.IntegerField(allow_null=True),
+            "status_code": serializers.IntegerField(allow_null=True),
+            "error": serializers.CharField(),
+            "retries_exhausted": serializers.IntegerField(),
+            "resolved": serializers.BooleanField(),
+            "created_at": serializers.DateTimeField(),
+        },
+        many=True,
+    ),
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def dlq_list_view(request):
+    """List dead-letter queue entries (admin only)."""
+    if not request.user.is_staff:
+        return Response({"error": "Admin access required"}, status=status.HTTP_403_FORBIDDEN)
+
+    from soroscan.ingest.models import WebhookDeadLetter
+
+    qs = WebhookDeadLetter.objects.select_related("subscription", "event").all()
+
+    resolved = request.query_params.get("resolved")
+    if resolved is not None:
+        qs = qs.filter(resolved=resolved.lower() in ("true", "1"))
+
+    subscription_id = request.query_params.get("subscription_id")
+    if subscription_id:
+        qs = qs.filter(subscription_id=subscription_id)
+
+    try:
+        limit = max(1, min(int(request.query_params.get("limit", 50)), 500))
+    except (TypeError, ValueError):
+        limit = 50
+
+    data = [
+        {
+            "id": entry.id,
+            "subscription_id": entry.subscription_id,
+            "event_id": entry.event_id,
+            "status_code": entry.status_code,
+            "error": entry.error,
+            "retries_exhausted": entry.retries_exhausted,
+            "resolved": entry.resolved,
+            "created_at": entry.created_at.isoformat(),
+        }
+        for entry in qs[:limit]
+    ]
+    return Response(data)
+
+
+@extend_schema(
+    request=inline_serializer(
+        name="DLQReplayRequest",
+        fields={"entry_ids": serializers.ListField(child=serializers.IntegerField())},
+    ),
+    responses=inline_serializer(
+        name="DLQReplayResponse",
+        fields={
+            "queued": serializers.IntegerField(),
+            "skipped": serializers.IntegerField(),
+        },
+    ),
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def dlq_replay_view(request):
+    """Replay selected dead-letter entries (admin only)."""
+    if not request.user.is_staff:
+        return Response({"error": "Admin access required"}, status=status.HTTP_403_FORBIDDEN)
+
+    from soroscan.ingest.models import WebhookDeadLetter
+    from soroscan.ingest.tasks import replay_dead_letter
+
+    entry_ids = request.data.get("entry_ids", [])
+    if not entry_ids:
+        return Response({"error": "entry_ids required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    entries = WebhookDeadLetter.objects.filter(
+        id__in=entry_ids, resolved=False
+    ).select_related("event")
+
+    queued = 0
+    skipped = 0
+    for entry in entries:
+        if entry.event is None:
+            skipped += 1
+            continue
+        replay_dead_letter.delay(entry.id)
+        queued += 1
+
+    return Response({"queued": queued, "skipped": skipped})
