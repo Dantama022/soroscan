@@ -2664,6 +2664,74 @@ def contract_identity_view(request):
     })
 
 
+# ---------------------------------------------------------------------------
+# Issue: Supported event schema (ABI) versions
+# ---------------------------------------------------------------------------
+
+# Canonical list of Soroban contract event schema (ABI) versions that the
+# indexer is able to decode and validate.  New versions are appended as the
+# event format evolves; ``latest`` advertises the recommended version for new
+# events.  Each entry documents the supported ``schema_version`` value used by
+# SC-38 structured events.
+SUPPORTED_EVENT_SCHEMA_VERSIONS: list[dict[str, object]] = [
+    {
+        "version": 1,
+        "name": "SoroScan Event Schema v1",
+        "description": (
+            "Initial event schema version covering the SC-20, SC-21, SC-31, "
+            "SC-36 and SC-38 contract standards."
+        ),
+        "status": "supported",
+    },
+]
+
+
+@extend_schema(
+    responses=inline_serializer(
+        name="SchemaVersionsResponse",
+        fields={
+            "versions": serializers.ListField(
+                child=inline_serializer(
+                    name="SchemaVersionEntry",
+                    fields={
+                        "version": serializers.IntegerField(),
+                        "name": serializers.CharField(),
+                        "description": serializers.CharField(),
+                        "status": serializers.CharField(),
+                    },
+                )
+            ),
+            "latest": serializers.IntegerField(),
+            "count": serializers.IntegerField(),
+        },
+    ),
+    description=(
+        "Return the list of Soroban contract event schema (ABI) versions that "
+        "this indexer supports for decoding and validation."
+    ),
+)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([UnauthenticatedIPRateThrottle])
+def schema_versions_view(request):
+    """
+    GET /api/schema/versions/
+
+    Returns the supported Soroban contract event schema (ABI) versions.
+    """
+    latest = max(
+        (entry["version"] for entry in SUPPORTED_EVENT_SCHEMA_VERSIONS),
+        default=None,
+    )
+    return Response(
+        {
+            "versions": SUPPORTED_EVENT_SCHEMA_VERSIONS,
+            "latest": latest,
+            "count": len(SUPPORTED_EVENT_SCHEMA_VERSIONS),
+        }
+    )
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([UserRateThrottle])
