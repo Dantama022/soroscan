@@ -7,7 +7,62 @@ interface ModalProps {
   children: React.ReactNode;
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = React.useRef<HTMLElement | null>(null);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+
+    const getFocusable = () =>
+      Array.from(
+        containerRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [],
+      );
+
+    const focusable = getFocusable();
+    (focusable[0] ?? containerRef.current)?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+
+      if (e.key !== "Tab") return;
+
+      const elements = getFocusable();
+      if (elements.length === 0) {
+        e.preventDefault();
+        return;
+      }
+
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      const active = document.activeElement;
+
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+      previouslyFocusedRef.current?.focus?.();
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
@@ -19,7 +74,14 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
       />
 
       {/* Modal Container */}
-      <div className="relative w-full max-w-lg border-terminal border-terminal-green bg-terminal-black p-1 shadow-glow-green/30 animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+      <div
+        ref={containerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title || "MESSAGE"}
+        tabIndex={-1}
+        className="relative w-full max-w-lg border-terminal border-terminal-green bg-terminal-black p-1 shadow-glow-green/30 animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col outline-none"
+      >
         {/* Box corners */}
         <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-terminal-green" />
         <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-terminal-green" />
