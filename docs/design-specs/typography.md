@@ -273,7 +273,33 @@ Button/Small
 
 ---
 
-## 9. Figma Font Plugin Setup
+## 9. CSS Utility Class Guidelines
+
+Practical rules for choosing Tailwind utility classes so type hierarchy stays consistent across new components.
+
+### Do
+
+| Use | For |
+|---|---|
+| `font-terminal-mono` | Any heading, label, badge, button, code, or status text — the default typeface for this UI. |
+| `font-terminal-sans` | Long-form prose only (docs pages, markdown-rendered content). |
+| `text-3xl font-semibold` / `text-2xl font-semibold` / `text-lg font-semibold` | H1 / H2 / H3 respectively — matches the `--type-h1-size` … `--type-h3-size` scale. |
+| `text-sm` | Body copy (`--type-body-size`, 14px). |
+| `text-xs` | Captions, helper text, timestamps (`--type-caption-size`, 12px). |
+| `tracking-widest uppercase text-xs font-bold` | Panel titles / section labels only. |
+| `tracking-wider uppercase text-xs` | Status indicators and header nav labels. |
+
+### Don't
+
+- Don't introduce a new font size outside the scale in §2 (`H1`–`Caption`) or the in-component sizes table. If a component needs something new, add it to that table first.
+- Don't apply `font-terminal-sans` inside dashboard/terminal panels — sans is reserved for prose contexts, not UI chrome.
+- Don't combine `uppercase` with body-copy text classes (`text-sm`/body weight) — uppercase treatment is reserved for labels, badges, and status text per §1–§2.
+- Don't hardcode a `line-height` value in a component; rely on the Tailwind text-size utility (which already carries the correct line-height for that scale step) or the CSS custom properties in §2.
+- Don't use a font weight other than 400/500/600/700 — these are the only weights loaded for JetBrains Mono/Inter in `layout.tsx`.
+
+---
+
+## 10. Figma Font Plugin Setup
 
 To use `JetBrains Mono` in Figma:
 
