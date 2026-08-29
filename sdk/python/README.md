@@ -18,6 +18,8 @@ pip install soroscan-sdk
 
 ## Quick Start
 
+> See [QUICKSTART.md](QUICKSTART.md) for a step-by-step walkthrough.
+
 ### CLI
 
 Installing the package exposes the `soroscan` command for local developer use.

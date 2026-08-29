@@ -29,6 +29,8 @@ pnpm add @soroscan/sdk
 
 ## Quick Start
 
+> See [QUICKSTART.md](QUICKSTART.md) for a step-by-step walkthrough.
+
 ```ts
 import { SoroScanClient } from "@soroscan/sdk";
 
@@ -47,6 +49,17 @@ const events = await client.getEvents({
 for (const event of events.items) {
   console.log(event.ledger, event.type, event.txHash);
 }
+```
+
+### Promise-based usage
+
+Every method returns a native `Promise`, so `async`/`await` and `.then()`/`.catch()` chaining both work:
+
+```ts
+client
+  .getEvents({ contractId: "CCAAA...", first: 50 })
+  .then((events) => events.items.forEach((e) => console.log(e.type, e.ledger)))
+  .catch((err) => console.error("Failed to fetch events:", err));
 ```
 
 ---
