@@ -120,10 +120,19 @@ class SlowQueryMiddleware:
         with connection.execute_wrapper(_execute):
             response = self.get_response(request)
 
-        # Forward RateLimit-* headers set by APIKeyThrottle
-        headers = getattr(request, "_api_key_throttle_headers", None)
-        if headers and hasattr(response, "__setitem__"):
-            for name, value in headers.items():
+        # Forward RateLimit-* headers set by throttle classes.
+        # _throttle_headers is the unified dict written by RateLimitHeaderMixin
+        # and APIKeyThrottle.  _api_key_throttle_headers is the legacy attribute
+        # kept for backwards-compatibility; it wins on conflict.
+        throttle_headers: dict = {}
+        generic = getattr(request, "_throttle_headers", None)
+        if generic:
+            throttle_headers.update(generic)
+        api_key = getattr(request, "_api_key_throttle_headers", None)
+        if api_key:
+            throttle_headers.update(api_key)  # API-key values override generic
+        if throttle_headers and hasattr(response, "__setitem__"):
+            for name, value in throttle_headers.items():
                 response[name] = value
 
         return response

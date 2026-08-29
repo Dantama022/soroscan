@@ -30,6 +30,16 @@ RateLimit-Remaining: 432
 RateLimit-Reset: 1714508459
 ```
 
+These headers are present on **all** API endpoints — REST, GraphQL, ingest, and webhook — regardless of which throttle tier applies to your request (anonymous, authenticated user, or API key).
+
+| Header | Description |
+|--------|-------------|
+| `RateLimit-Limit` | Maximum requests allowed in the current window |
+| `RateLimit-Remaining` | Requests remaining before you are rate-limited |
+| `RateLimit-Reset` | Unix timestamp (UTC) when the window resets and the counter clears |
+
+When you have an **API key**, the headers reflect your per-key hourly quota. For unauthenticated or JWT-authenticated requests, the headers reflect the per-minute window for your tier.
+
 The `Retry-After` header tells you exactly how many seconds until your limit resets (calculated as seconds remaining in the current minute).
 
 ## Checking Your Current Usage
