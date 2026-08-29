@@ -7,7 +7,7 @@ import '@testing-library/jest-dom';
 
 // ── Mock recharts so tests run without canvas ─────────────────────────────────
 jest.mock('recharts', () => {
-  const React = require('react');
+  const React = jest.requireActual('react');
   const Mock = ({ children, 'data-testid': tid }: { children?: React.ReactNode; 'data-testid'?: string }) =>
     <div data-testid={tid}>{children}</div>;
   return {

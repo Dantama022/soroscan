@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 
 interface EventRow {
   contractId: string;
@@ -68,23 +68,23 @@ export default function QueryBuilderReportPage() {
   const [columns, setColumns] = useState<Array<keyof EventRow>>(selectableColumns);
   const [rowLimit, setRowLimit] = useState(1000);
   const [reportName, setReportName] = useState("");
-  const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
-  const [scheduledReports, setScheduledReports] = useState<ScheduledReport[]>([]);
+  const [savedReports, setSavedReports] = useState<SavedReport[]>(() => {
+    if (typeof window === "undefined") return [];
+    const saved = localStorage.getItem("savedReports");
+    return saved ? (JSON.parse(saved) as SavedReport[]) : [];
+  });
+  const [scheduledReports, setScheduledReports] = useState<ScheduledReport[]>(() => {
+    if (typeof window === "undefined") return [];
+    const scheduled = localStorage.getItem("scheduledReports");
+    return scheduled ? (JSON.parse(scheduled) as ScheduledReport[]) : [];
+  });
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [scheduleEmail, setScheduleEmail] = useState("");
   const [scheduleFrequency, setScheduleFrequency] = useState<"daily" | "weekly">("daily");
   const [scheduleTime, setScheduleTime] = useState("09:00");
 
-  // Load saved and scheduled reports from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("savedReports");
-    const scheduled = localStorage.getItem("scheduledReports");
-    if (saved) setSavedReports(JSON.parse(saved));
-    if (scheduled) setScheduledReports(JSON.parse(scheduled));
-  }, []);
-
   const rows = useMemo(() => {
-    let filtered = sourceRows.filter((row) => {
+    const filtered = sourceRows.filter((row) => {
       const contractMatch = contractFilter ? row.contractId.toLowerCase().includes(contractFilter.toLowerCase()) : true;
       const typeMatch = eventTypeFilter ? row.eventType === eventTypeFilter : true;
       return contractMatch && typeMatch;

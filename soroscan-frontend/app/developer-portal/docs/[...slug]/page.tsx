@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Navbar } from "@/components/terminal/landing/Navbar";
 import { Footer } from "@/components/terminal/landing/Footer";
@@ -48,13 +49,13 @@ export default async function DocPage({ params }: PageParams) {
     <div className="min-h-screen font-terminal-mono bg-terminal-black text-terminal-green">
       <Navbar />
       <div className="border-b border-terminal-green/20 px-6 py-2 flex items-center gap-2 text-xs">
-        <a href="/developer-portal" className="text-terminal-gray hover:text-terminal-cyan">
+        <Link href="/developer-portal" className="text-terminal-gray hover:text-terminal-cyan">
           Developer Portal
-        </a>
+        </Link>
         <span className="text-terminal-gray/40">/</span>
-        <a href="/developer-portal/docs" className="text-terminal-gray hover:text-terminal-cyan">
+        <Link href="/developer-portal/docs" className="text-terminal-gray hover:text-terminal-cyan">
           Docs
-        </a>
+        </Link>
         <span className="text-terminal-gray/40">/</span>
         <span className="text-terminal-green">{slugStr}</span>
       </div>

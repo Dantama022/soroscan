@@ -79,7 +79,11 @@ def get_cached_contract(contract_id: str) -> Any:
             return contract
 
         try:
-            contract = TrackedContract.objects.get(contract_id=contract_id)
+            with tracer.start_as_current_span(
+                "db.query.contract_lookup",
+                attributes={"contract_id": contract_id},
+            ):
+                contract = TrackedContract.objects.get(contract_id=contract_id)
             cache.set(key, contract, timeout=3600)  # 1 hour TTL
             return contract
         except TrackedContract.DoesNotExist:

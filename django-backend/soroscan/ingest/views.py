@@ -32,7 +32,8 @@ from soroscan.webhook_signing import build_x_signature_header, public_key_base64
 
 from .cache_utils import cache_result, get_or_set_json, query_cache_ttl, stable_cache_key
 from .decorators import validate_webhook_signature
-from .models import (
+from .telemetry import tracer
+from .models import (  # noqa: E402
     APIKey,
     AdminAction,
     ArchivedEventBatch,
@@ -1267,12 +1268,19 @@ def record_event_view(request):
     data = serializer.validated_data
 
     try:
-        client = SorobanClient()
-        result = client.record_event(
-            target_contract_id=data["contract_id"],
-            event_type=data["event_type"],
-            payload_hash_hex=data["payload_hash"],
-        )
+        with tracer.start_as_current_span(
+            "event.record",
+            attributes={
+                "contract_id": data["contract_id"],
+                "event_type": data["event_type"],
+            },
+        ):
+            client = SorobanClient()
+            result = client.record_event(
+                target_contract_id=data["contract_id"],
+                event_type=data["event_type"],
+                payload_hash_hex=data["payload_hash"],
+            )
 
         if result.success:
             return Response(
@@ -1315,13 +1323,20 @@ def record_structured_event_view(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     data = serializer.validated_data
-    result = SorobanClient().record_structured_event(
-        target_contract_id=data["contract_id"],
-        event_type=data["event_type"],
-        payload_hash_hex=data["payload_hash"],
-        schema_version=data["schema_version"],
-        correlation_id_hex=data["correlation_id"],
-    )
+    with tracer.start_as_current_span(
+        "event.record",
+        attributes={
+            "contract_id": data["contract_id"],
+            "event_type": data["event_type"],
+        },
+    ):
+        result = SorobanClient().record_structured_event(
+            target_contract_id=data["contract_id"],
+            event_type=data["event_type"],
+            payload_hash_hex=data["payload_hash"],
+            schema_version=data["schema_version"],
+            correlation_id_hex=data["correlation_id"],
+        )
     if result.success:
         return Response(
             {

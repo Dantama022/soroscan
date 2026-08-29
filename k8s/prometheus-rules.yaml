@@ -11,29 +11,27 @@ spec:
       rules:
         - alert: SoroScanApiErrorRateHigh
           expr: |
-            100 * sum(rate(soroscan_http_responses_total{status_class="5xx"}[5m]))
-              / clamp_min(sum(rate(soroscan_http_responses_total[5m])), 0.001) > 1
+            100 * sum by (service) (rate(soroscan_http_responses_total{status_class="5xx"}[5m]))
+              / clamp_min(sum by (service) (rate(soroscan_http_responses_total[5m])), 0.001) > 1
           for: 5m
           labels:
             severity: warning
-            service: soroscan-backend
           annotations:
             summary: "SoroScan API error rate exceeds the 1% SLA threshold"
             description: "5xx responses are above 1% for service {{ $labels.service }}."
-            root_cause_query: 'topk(5, sum(rate(soroscan_http_responses_total{status_class="5xx"}[5m])) by (view,error_type))'
+            root_cause_query: 'topk(5, sum by (view,error_type) (rate(soroscan_http_responses_total{status_class="5xx",service="{{ $labels.service }}"}[5m])))'
             runbook_url: "https://github.com/SoroScan/soroscan/blob/main/docs/deployment/runbooks.md"
         - alert: SoroScanApiErrorRateCritical
           expr: |
-            100 * sum(rate(soroscan_http_responses_total{status_class="5xx"}[5m]))
-              / clamp_min(sum(rate(soroscan_http_responses_total[5m])), 0.001) > 5
+            100 * sum by (service) (rate(soroscan_http_responses_total{status_class="5xx"}[5m]))
+              / clamp_min(sum by (service) (rate(soroscan_http_responses_total[5m])), 0.001) > 5
           for: 2m
           labels:
             severity: critical
-            service: soroscan-backend
           annotations:
             summary: "SoroScan API critical error rate exceeds 5%"
             description: "5xx responses are above 5% for service {{ $labels.service }}."
-            root_cause_query: 'topk(5, sum(rate(soroscan_http_responses_total{status_class="5xx"}[5m])) by (view,error_type))'
+            root_cause_query: 'topk(5, sum by (view,error_type) (rate(soroscan_http_responses_total{status_class="5xx",service="{{ $labels.service }}"}[5m])))'
             runbook_url: "https://github.com/SoroScan/soroscan/blob/main/docs/deployment/runbooks.md"
     - name: soroscan.celery
       rules:

@@ -13,6 +13,7 @@ from stellar_sdk import Keypair, TransactionBuilder, scval
 from stellar_sdk.soroban_server import SorobanServer
 
 from soroscan.circuit_breaker import execute_with_circuit_breaker
+from soroscan.ingest.telemetry import tracer
 from stellar_sdk.xdr import (
     SCVal,
     SCValType,
@@ -705,12 +706,18 @@ class SorobanClient:
             return payload
 
         try:
-            self._rate_limiter.acquire()
-            response = execute_with_circuit_breaker(
-                "soroban_rpc",
-                get_entries,
-                keys=[{"contractData": {"contract": contract_id, "key": "AAAA"}}],
-            )
+            attributes = {"contract_id": contract_id}
+            if ledger is not None:
+                attributes["ledger"] = ledger
+            with tracer.start_as_current_span(
+                "soroban.rpc.get_contract_state", attributes=attributes
+            ):
+                self._rate_limiter.acquire()
+                response = execute_with_circuit_breaker(
+                    "soroban_rpc",
+                    get_entries,
+                    keys=[{"contractData": {"contract": contract_id, "key": "AAAA"}}],
+                )
         except Exception:
             logger.exception("Failed to fetch contract state for %s", contract_id)
             return payload

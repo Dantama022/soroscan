@@ -11,7 +11,7 @@ import {
   SortDirectionIndicator,
 } from "./Table"
 
-export interface ColumnDefinition<T = any> {
+export interface ColumnDefinition<T = unknown> {
   /** Unique identifier for the column */
   key: string
   /** Display label for the column header */
@@ -19,7 +19,7 @@ export interface ColumnDefinition<T = any> {
   /** Icon component to display next to the label in card view */
   icon?: React.ComponentType<{ className?: string }>
   /** Function to render cell content */
-  render?: (item: T, value: any) => React.ReactNode
+  render?: (item: T, value: unknown) => React.ReactNode
   /** Whether this column is sortable */
   sortable?: boolean
   /** CSS classes for the column */
@@ -28,7 +28,7 @@ export interface ColumnDefinition<T = any> {
   cellClassName?: string
 }
 
-export interface ResponsiveTableProps<T = any> {
+export interface ResponsiveTableProps<T = unknown> {
   /** Array of data items to display */
   data: T[]
   /** Column definitions */
@@ -61,7 +61,7 @@ export interface ResponsiveTableProps<T = any> {
  * - Terminal styling consistent with existing components
  * - Accessible with proper ARIA labels and focus management
  */
-export function ResponsiveTable<T = any>({
+export function ResponsiveTable<T = unknown>({
   data,
   columns,
   sort,
@@ -82,12 +82,12 @@ export function ResponsiveTable<T = any>({
   }
 
   const getValue = (item: T, column: ColumnDefinition<T>) => {
-    return (item as any)[column.key]
+    return (item as Record<string, unknown>)[column.key]
   }
 
   const renderCellContent = (item: T, column: ColumnDefinition<T>) => {
     const value = getValue(item, column)
-    return column.render ? column.render(item, value) : value
+    return column.render ? column.render(item, value) : (value as React.ReactNode)
   }
 
   if (loading) {

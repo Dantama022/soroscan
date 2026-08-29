@@ -9,6 +9,7 @@ import uuid
 from django.conf import settings
 from django.db import connection
 from django.http import JsonResponse
+from prometheus_client import Histogram
 
 from .log_context import set_request_id
 
@@ -272,4 +273,50 @@ class CacheBustingMiddleware:
             else:
                 response["Cache-Control"] = "private, max-age=0"
 
+        return response
+
+
+# Histogram buckets are chosen to make p50/p95/p99 percentiles meaningful
+# (5ms … 30s) while keeping cardinality bounded via the per-endpoint label.
+REQUEST_LATENCY_SECONDS = Histogram(
+    "soroscan_request_latency_seconds",
+    "Request latency distribution used to derive p50/p95/p99 percentiles",
+    ["method", "endpoint", "status"],
+    buckets=(
+        0.005,
+        0.01,
+        0.025,
+        0.05,
+        0.1,
+        0.25,
+        0.5,
+        1.0,
+        2.5,
+        5.0,
+        10.0,
+        30.0,
+    ),
+)
+
+
+class RequestLatencyMiddleware:
+    """Record per-endpoint request latency for percentile analysis.
+
+    The endpoint label uses the resolved URL pattern (``resolver_match.route``)
+    once available, falling back to the raw path, so dashboards can compute
+    ``histogram_quantile`` over ``soroscan_request_latency_seconds_bucket``.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        start = time.perf_counter()
+        response = self.get_response(request)
+        duration = time.perf_counter() - start
+
+        match = getattr(request, "resolver_match", None)
+        endpoint = getattr(match, "route", None) or request.path
+        status = getattr(response, "status_code", 0)
+        REQUEST_LATENCY_SECONDS.labels(request.method, endpoint, status).observe(duration)
         return response

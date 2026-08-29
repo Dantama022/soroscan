@@ -908,9 +908,14 @@ def dispatch_webhook(self, subscription_id: int, event_id: int, replay: bool = F
 
         headers = {
             "Content-Type": "application/json",
-            "X-SoroScan-Signature": _build_webhook_signature_header(webhook, payload_bytes),
             "X-SoroScan-Timestamp": timezone.now().isoformat(),
         }
+        with tracer.start_as_current_span(
+            "webhook.sign", attributes={"webhook_id": subscription_id}
+        ):
+            headers["X-SoroScan-Signature"] = _build_webhook_signature_header(
+                webhook, payload_bytes
+            )
         if replay:
             headers["X-SoroScan-Replay"] = "true"
             original_ts = event_data.get("timestamp")
@@ -935,12 +940,20 @@ def dispatch_webhook(self, subscription_id: int, event_id: int, replay: bool = F
             timeout_value = 10
 
         try:
-            response = requests.post(
-                webhook.target_url,
-                data=payload_bytes,
-                headers=headers,
-                timeout=timeout_value,
-            )
+            with tracer.start_as_current_span(
+                "webhook.http_post",
+                attributes={
+                    "webhook_id": subscription_id,
+                    "target_url": webhook.target_url,
+                    "attempt": attempt_number,
+                },
+            ):
+                response = requests.post(
+                    webhook.target_url,
+                    data=payload_bytes,
+                    headers=headers,
+                    timeout=timeout_value,
+                )
             status_code = response.status_code
             elapsed_s = time.monotonic() - _start
             latency_ms = int(elapsed_s * 1000)
