@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Trash2, FlaskConical, ChevronDown, ChevronUp } from "lucide-react"
+import { Trash2, FlaskConical, ChevronDown, ChevronUp, Plus } from "lucide-react"
 import { EmptyState, EmptyStateIcon } from "@/components/ui/empty-state"
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -17,6 +17,7 @@ interface WebhookTableProps {
   webhooks: Webhook[]
   onDelete: (id: string) => void
   onTest: (id: string) => void
+  onCreate?: () => void
   testingId?: string | null
   testResult?: { id: string; ok: boolean; code: number } | null
 }
@@ -197,7 +198,7 @@ function WebhookCard({
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export function WebhookTable({ webhooks, onDelete, onTest, testingId, testResult }: WebhookTableProps) {
+export function WebhookTable({ webhooks, onDelete, onTest, onCreate, testingId, testResult }: WebhookTableProps) {
   const [sortField, setSortField] = React.useState<SortField>("lastDelivery")
   const [sortDir, setSortDir] = React.useState<SortDir>("desc")
 
@@ -221,13 +222,27 @@ export function WebhookTable({ webhooks, onDelete, onTest, testingId, testResult
     return (
       <EmptyState
         variant="terminal"
+        ariaLabel="No webhook subscriptions configured"
         icon={
           <EmptyStateIcon>
             <div className="text-terminal-green text-2xl">[ ]</div>
           </EmptyStateIcon>
         }
-        title="NO_SUBSCRIPTIONS_FOUND"
-        description="Create your first webhook to start receiving events."
+        title="No webhooks configured"
+        description="Subscribe an endpoint to start receiving real-time contract event deliveries."
+        action={
+          onCreate
+            ? {
+                id: "empty-state-create-webhook",
+                label: "New Webhook",
+                onClick: onCreate,
+                ariaLabel: "Create your first webhook",
+                terminalVariant: "primary",
+                size: "lg",
+                icon: <Plus className="h-4 w-4" aria-hidden="true" />,
+              }
+            : undefined
+        }
       />
     )
   }

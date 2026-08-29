@@ -206,6 +206,12 @@ export function EventTable({
               }
               title="No events found"
               description="Select a contract and adjust filters to view events."
+              action={{
+                label: "View Contracts",
+                href: "/contracts",
+                ariaLabel: "Go to the contracts list",
+                terminalVariant: "secondary",
+              }}
             />
           )}
         </div>

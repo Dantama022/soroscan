@@ -66,7 +66,22 @@ describe("WebhookTable", () => {
     render(
       <WebhookTable webhooks={[]} onDelete={mockDelete} onTest={mockTest} />
     )
-    expect(screen.getByText("NO_SUBSCRIPTIONS_FOUND")).toBeInTheDocument()
+    expect(screen.getByText("No webhooks configured")).toBeInTheDocument()
+  })
+
+  it("shows a create CTA in the empty state when onCreate is provided", () => {
+    const mockCreate = jest.fn()
+    render(
+      <WebhookTable
+        webhooks={[]}
+        onDelete={mockDelete}
+        onTest={mockTest}
+        onCreate={mockCreate}
+      />
+    )
+    const button = screen.getByRole("button", { name: /create your first webhook/i })
+    fireEvent.click(button)
+    expect(mockCreate).toHaveBeenCalledTimes(1)
   })
 
   it("calls onDelete when trash button is clicked", () => {

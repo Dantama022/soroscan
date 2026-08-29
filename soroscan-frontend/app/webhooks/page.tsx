@@ -148,6 +148,7 @@ export default function WebhooksPage() {
             webhooks={webhooks}
             onDelete={handleDelete}
             onTest={handleTest}
+            onCreate={() => setCreateOpen(true)}
             testingId={testingId}
             testResult={testResult}
           />
