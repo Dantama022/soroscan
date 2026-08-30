@@ -7,8 +7,10 @@ Official Python client for the SoroScan API - Stellar/Soroban event indexing.
 from soroscan.builder import (
     AsyncContractQueryBuilder,
     AsyncEventQueryBuilder,
+    AsyncWebhookQueryBuilder,
     ContractQueryBuilder,
     EventQueryBuilder,
+    WebhookQueryBuilder,
 )
 from soroscan.client import AsyncSoroScanClient, SoroScanClient
 from soroscan.exceptions import (
@@ -47,6 +49,8 @@ __all__ = [
     "AsyncEventQueryBuilder",
     "ContractQueryBuilder",
     "AsyncContractQueryBuilder",
+    "WebhookQueryBuilder",
+    "AsyncWebhookQueryBuilder",
     "Paginator",
     "AsyncPaginator",
     "ContractEvent",

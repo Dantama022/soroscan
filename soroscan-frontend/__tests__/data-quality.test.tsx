@@ -6,7 +6,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 jest.mock('recharts', () => {
-  const React = require('react');
+  const React = jest.requireActual('react');
   return {
     BarChart: ({ children }: { children: React.ReactNode }) => <div data-testid="bar-chart">{children}</div>,
     Bar: () => null, XAxis: () => null, YAxis: () => null,

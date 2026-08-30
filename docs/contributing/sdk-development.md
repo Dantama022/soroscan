@@ -1,3 +1,9 @@
+---
+title: SDK Development Guide
+description: Architecture, adding API methods, type generation, testing, and release process for SoroScan SDKs
+sidebar_label: SDK Development
+---
+
 # SDK Development Guide
 
 This guide explains how to develop and maintain SoroScan SDKs for Python and TypeScript.

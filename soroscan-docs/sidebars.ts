@@ -22,7 +22,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'SDKs',
-      items: ['sdk-python', 'sdk-typescript'],
+      items: ['sdk-python', 'sdk-typescript', 'sdk/sdk-development-guide'],
     },
     {
       type: 'category',
@@ -71,6 +71,7 @@ const sidebars: SidebarsConfig = {
         'contributing/git-and-pr-workflow',
         'contributing/documentation-guide',
         'contributing/community-standards',
+        'contributing/sdk-development',
       ],
     },
     'rate-limits',

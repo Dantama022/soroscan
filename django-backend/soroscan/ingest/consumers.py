@@ -7,6 +7,7 @@ import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from .models import TrackedContract
+from .telemetry import tracer
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +69,15 @@ class EventConsumer(AsyncWebsocketConsumer):
 
         @database_sync_to_async
         def _get_contract():
-            try:
-                return TrackedContract.objects.get(contract_id=contract_id, is_active=True)
-            except TrackedContract.DoesNotExist:
-                return None
+            with tracer.start_as_current_span(
+                "db.query.contract_lookup",
+                attributes={"contract_id": contract_id},
+            ):
+                try:
+                    return TrackedContract.objects.get(
+                        contract_id=contract_id, is_active=True
+                    )
+                except TrackedContract.DoesNotExist:
+                    return None
 
         return await _get_contract()

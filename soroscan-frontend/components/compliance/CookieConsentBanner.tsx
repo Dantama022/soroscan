@@ -1,17 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 
 export default function CookieConsentBanner() {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    // Check if user has already consented
-    const consent = localStorage.getItem("soroscan-cookie-consent");
-    if (!consent) {
-      setIsVisible(true);
-    }
-  }, []);
+  const [isVisible, setIsVisible] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !localStorage.getItem("soroscan-cookie-consent");
+  });
 
   const handleAccept = () => {
     localStorage.setItem("soroscan-cookie-consent", "accepted");
@@ -31,7 +26,7 @@ export default function CookieConsentBanner() {
         <div className="mb-4 sm:mb-0 sm:mr-6">
           <h4 className="text-lg font-bold text-green-400 mb-1">Cookie Consent</h4>
           <p className="text-sm text-green-300/80">
-            We use strictly necessary cookies to make our site work. We'd also like to set optional analytics cookies to help us improve it. We won't set optional cookies unless you enable them. Using this tool will set a cookie on your device to remember your preferences.
+            We use strictly necessary cookies to make our site work. We&apos;d also like to set optional analytics cookies to help us improve it. We won&apos;t set optional cookies unless you enable them. Using this tool will set a cookie on your device to remember your preferences.
           </p>
         </div>
         

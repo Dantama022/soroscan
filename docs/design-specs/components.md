@@ -13,10 +13,11 @@
 4. [Card / DashboardPanel](#4-card--dashboardpanel)
 5. [StatusIndicator](#5-statusindicator)
 6. [Alert](#6-alert)
-7. [Modal](#7-modal)
-8. [CodeBlock](#8-codeblock)
-9. [Navigation (AppShell)](#9-navigation-appshell)
-10. [Layout Dimensions](#10-layout-dimensions)
+7. [Toast](#7-toast)
+8. [Modal](#8-modal)
+9. [CodeBlock](#9-codeblock)
+10. [Navigation (AppShell)](#10-navigation-appshell)
+11. [Layout Dimensions](#11-layout-dimensions)
 
 ---
 
@@ -297,7 +298,131 @@ Active:   icon swaps to CheckCircle2 for 2s after copy
 
 ---
 
-## 7. Modal
+## 7. Toast
+
+**Source:** `soroscan-frontend/context/ToastContext.tsx`
+**Tests:** `soroscan-frontend/__tests__/toast.test.tsx`
+**Theme:** Terminal dark — tokens from `hsl-color-tokens.md` and `contrast-matrix.md`
+
+### Variant Specs (4 toast variants)
+
+| Variant   | Border (left 4px)       | Icon component  | Icon size | Icon color         | Hex       | Shadow                              | ARIA role |
+|-----------|-------------------------|-----------------|-----------|--------------------|-----------|-------------------------------------|-----------|
+| `success` | `border-terminal-green` | `CheckCircle2`  | 20×20px   | `terminal-green`   | `#00ff41` | `shadow-[var(--shadow-glow-green)]` | `status`  |
+| `error`   | `border-terminal-danger`| `AlertCircle`   | 20×20px   | `terminal-danger`  | `#ff3366` | `shadow-[var(--shadow-glow-danger)]`| `alert`   |
+| `warning` | `border-terminal-warning`| `AlertTriangle`| 20×20px   | `terminal-warning` | `#ffaa00` | `shadow-[0_0_18px_rgba(255,170,0,0.45)]` | `status` |
+| `info`    | `border-terminal-cyan`  | `Info`          | 20×20px   | `terminal-cyan`    | `#00d4ff` | `shadow-[var(--shadow-glow-cyan)]`  | `status`  |
+
+- **Background:** `bg-terminal-black/95` = `#0a0e27` at 95% opacity (see `hsl-color-tokens.md` bg-base)
+- **Text:** Title `text-foreground` 14px Bold `leading-none tracking-tight`, Message `text-foreground/90` 14px `leading-snug` `break-words`
+- **Border:** `border` + `border-l-4` (4px left accent), 1px other sides in variant color
+- **Font:** JetBrains Mono (terminal), `font-terminal-mono`
+- **Container:** `fixed z-50 max-h-screen w-full max-w-sm flex-col gap-3 px-4 sm:px-0`, position `bottom-4 right-4` (default) or `right-4 top-4` (`position=top-right`), newest toast prepended (stack gap 12px)
+
+### Layout Structure
+
+```
+ToastContainer — fixed z-50 flex max-h-screen gap-3 (12px), max-w-sm (384px), px-4 mobile / 0 sm:px
+  aria-label="Notifications" aria-live="polite" aria-relevant="additions removals"
+  data-position="bottom-right" | "top-right"
+  Position: bottom-right (default) → bottom-4 right-4
+            top-right            → right-4 top-4
+
+ToastItem — flex items-start gap-3 (12px), border + border-l-4, bg-terminal-black/95, px-4 py-3, font-terminal-mono text-sm, shadow variant
+  data-toast-type={variant}, role={error ? alert : status}
+  ├── Icon:           20×20 shrink-0 mt-0.5, color variant (aria-hidden)
+  ├── Content:        flex-1 min-w-0 space-y-1
+  │   ├── Title:      h4 font-bold leading-none tracking-tight text-foreground (optional)
+  │   ├── Message:    p break-words leading-snug text-foreground/90
+  │   └── Action:     mt-2 button text-xs font-semibold underline underline-offset-2 (optional, dismisses on click)
+  └── Dismiss button: ml-2 h-6 w-6 rounded-sm border border-terminal-green/40 text-terminal-green/80, hover border-green text-green, focus ring-2 cyan
+        aria-label="Dismiss {title} notification", X icon 12×12
+```
+
+### Animation Timing Guidelines
+
+| Motion              | Duration | Easing / Token                | Notes                                                                 |
+|---------------------|----------|-------------------------------|-----------------------------------------------------------------------|
+| Slide-in (enter)    | 200ms    | `--ease-standard` `cubic-bezier(0.4,0,0.2,1)` | From `translate-y-2 opacity-0` → `0 opacity-100`; uses `transition-all` |
+| Auto-dismiss        | 5000ms   | —                             | `DEFAULT_TOAST_DURATION_MS = 5000`; configurable via `ToastProvider duration` prop |
+| Pause on hover      | —        | —                             | `onMouseEnter` clears timer, `onMouseLeave` restarts; prevents loss while reading |
+| Dismiss out (exit)  | 150ms    | `ease-out`                    | Fade + slide-out; removed from DOM via state filter                   |
+| Stack               | instant  | —                             | New toast prepends (`[new, ...current]`), container `gap-3` maintains 12px spacing |
+| Disabled auto-dismiss | 0ms    | —                             | `duration={0}` keeps toast visible until manual dismiss (tested in `toast.test.tsx`) |
+
+- **Prefer `prefers-reduced-motion`:** if user requests reduced motion, fallback to fade only (no slide) — matches Alert transition strategy.
+
+### Color Contrast Specifications
+
+Reference `contrast-matrix.md` and `hsl-color-tokens.md`. All toast variants use dark surface `#0a0e27` (L 0.0089) as background.
+
+| Variant text/icon on bg-terminal-black (#0a0e27) | Hex       | Ratio  | WCAG AA Normal (4.5:1) | AAA (7:1) |
+|--------------------------------------------------|-----------|--------|------------------------|-----------|
+| `success` green text/icon                        | `#00ff41` | 15.3:1 | ✅ Pass                | ✅ Pass   |
+| `info` cyan text/icon                            | `#00d4ff` | 12.4:1 | ✅ Pass                | ✅ Pass   |
+| `warning` amber text/icon                        | `#ffaa00` | 9.8:1  | ✅ Pass                | ✅ Pass   |
+| `error` danger text/icon                         | `#ff3366` | 5.2:1  | ✅ Pass                | ❌ Fail (but AA pass; large text AAA) |
+| Body message `text-foreground` (≈#d8e1ed)         | `#d8e1ed` | 13.6:1 | ✅ Pass                | ✅ Pass   |
+| Dismiss button border `terminal-green/40`        | decorative | 2.1:1 | ❌ decorative (supplemented by solid focus ring 15.3:1) | — |
+
+Border subtlety is intentional — primary accessible affordance is the 4px left accent + icon + shadow. Focus ring is solid `terminal-green` 15.3:1, satisfying WCAG §1.4.11 Non-text Contrast (≥3:1) and §2.4.11 Focus Appearance.
+
+**States:**
+
+```
+Default:  bg-terminal-black/95, border variant, shadow glow variant
+Hover (dismiss btn): border-terminal-green text-terminal-green, bg-transparent
+Focus-visible: outline 2px solid terminal-green offset 2px + ring-2 terminal-cyan
+Active (action btn): underline offset-2, text-foreground/80
+Disabled (toast): n/a — toast is transient; container pointer-events-none, item pointer-events-auto
+```
+
+### Accessibility
+
+- Container: `aria-live="polite"` `aria-relevant="additions removals"` `aria-label="Notifications"` — polite for success/info/warning, appropriate for non-critical updates.
+- Error variant: `role="alert"` (assertive), others `role="status"` (polite) — tested in `toast.test.tsx:269` matrix.
+- Icon: `aria-hidden="true"` (decorative, redundant with text).
+- Dismiss: `aria-label="Dismiss {title} notification"` (or generic `Dismiss notification` if no title), keyboard focusable, 24×24 touch target (meets 44px recommendation when stacked with padding).
+- Action button: text-based, underline, keyboard operable, calls `action.onClick()` then auto-dismisses.
+
+### Figma UI Library Component
+
+```
+Toast [variant=success|error|warning|info × position=bottom-right|top-right × withTitle=true|false × withAction=true|false × state=default|hover|focus]
+
+Variant matrix: 4 variants × 2 positions × 2 title × 2 action = 32 core cells
++ Stacked example: show 2–3 toasts gap-12px, newest on top (validates toast.test.tsx stacking)
+
+Recommended Figma setup:
+  Property: Variant   → success | error | warning | info
+  Property: Position  → bottom-right | top-right
+  Property: Has Title → true | false
+  Property: Has Action→ true | false
+  Property: State     → default | hover | focus
+
+Frame per cell:
+  ├── Auto Layout, horizontal, gap=12, padding=16/12, width=384 (max-w-sm), min-height=48
+  ├── Left accent: 4px solid variant color
+  ├── Fill: #0a0e27 @ 95% + variant glow shadow
+  ├── Icon: 20×20 variant color
+  └── Content: Auto Layout vertical gap=4
+
+Publish to Team Library:
+  Page: 📄 Components → 🖼 Toasts
+  Also demo page: 📄 Notifications → toast stacking + auto-dismiss animation prototype
+    Prototype: after delay 5000ms → Smart animate 150ms ease-out to opacity 0 + slide
+    On hover: pause prototype timer (interactive component)
+```
+
+### Related Tokens
+
+- Duration tokens: `--duration-fast 100ms`, `--duration-normal 300ms` (see Layout Dimensions); toast uses 200ms (between) + 5000ms dwell.
+- Shadows: `var(--shadow-glow-green)`, `var(--shadow-glow-cyan)`, `var(--shadow-glow-danger)` (defined in `hsl-tokens.css`).
+- Typography: `font-terminal-mono` (JetBrains Mono).
+
+---
+
+## 8. Modal
 
 **Source:** `soroscan-frontend/components/ui/modal.tsx`  
 **Library:** Radix UI Dialog
@@ -350,7 +475,7 @@ Duration: 200ms
 
 ---
 
-## 8. CodeBlock
+## 9. CodeBlock
 
 **Source:** `soroscan-frontend/components/ui/CodeBlock.module.css`
 
@@ -396,7 +521,7 @@ Copy button padding: `0 12px`, min 44×44px, border-radius: 3px, font: 10px/uppe
 
 ---
 
-## 9. Navigation (AppShell)
+## 10. Navigation (AppShell)
 
 **Source:** `soroscan-frontend/components/layout/AppShell.tsx`
 
@@ -452,7 +577,7 @@ Nav link padding: `px-4 py-2` (16px / 8px), min-height: 44px, gap (icon + text):
 
 ---
 
-## 10. Layout Dimensions
+## 11. Layout Dimensions
 
 ### Spacing Scale
 
@@ -526,6 +651,7 @@ Recommended page structure in Figma:
   ├── 🖼 DashboardPanels (flat/default/elevated, 3 cells)
   ├── 🖼 StatusIndicators (active/failed/pending/inactive × sm/md/lg, 12 cells)
   ├── 🖼 Alerts          (info/success/warning/error × dismissible, 8 cells)
+  ├── 🖼 Toasts          (success/error/warning/info × bottom-right/top-right × title/action, 32 cells + stacked)
   ├── 🖼 Modals          (default + wide, 2 cells)
   └── 🖼 CodeBlocks      (with/without line numbers, 2 cells)
 
@@ -542,4 +668,4 @@ Recommended page structure in Figma:
 
 ---
 
-*Last updated: 2026-07-29 | Source: `soroscan-frontend/components/`*
+*Last updated: 2026-08-30 | Source: `soroscan-frontend/components/` + `context/ToastContext.tsx` | Toast specs added for #975*

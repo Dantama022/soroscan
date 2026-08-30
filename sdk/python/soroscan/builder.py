@@ -1,8 +1,8 @@
-"""Fluent request builder pattern for SoroScan SDK (issue #481)."""
+"""Fluent request builder pattern for SoroScan SDK (issue #481, #1281)."""
 
 from typing import Any, Literal, TYPE_CHECKING
 
-from soroscan.models import ContractEvent, PaginatedResponse, TrackedContract
+from soroscan.models import ContractEvent, PaginatedResponse, TrackedContract, WebhookSubscription
 
 if TYPE_CHECKING:
     from soroscan.client import SoroScanClient, AsyncSoroScanClient
@@ -406,6 +406,191 @@ class ContractQueryBuilder:
             params["is_active"] = self._is_active
         if self._search:
             params["search"] = self._search
+        return params
+
+
+class WebhookQueryBuilder:
+    """
+    Fluent builder for constructing webhook subscription queries (issue #1281).
+
+    Example:
+        >>> client = SoroScanClient()
+        >>> webhooks = (client.webhooks()
+        ...     .filter_by_active(True)
+        ...     .filter_by_event_type("transfer")
+        ...     .paginate(limit=20, offset=0)
+        ...     .execute())
+        >>> params = client.webhooks().filter_by_active(True).build()
+    """
+
+    def __init__(self, client: "SoroScanClient") -> None:
+        """Initialize the builder with a client instance."""
+        self._client = client
+        self._is_active: bool | None = None
+        self._event_type: str | None = None
+        self._contract_id: int | None = None
+        self._page: int = 1
+        self._page_size: int = 50
+
+    def filter_by_active(self, is_active: bool) -> "WebhookQueryBuilder":
+        """
+        Filter webhooks by active status.
+
+        Args:
+            is_active: True for active subscriptions, False for inactive
+
+        Returns:
+            Self for method chaining
+        """
+        self._is_active = is_active
+        return self
+
+    def filter_by_event_type(self, event_type: str) -> "WebhookQueryBuilder":
+        """
+        Filter webhooks by event type.
+
+        Args:
+            event_type: Event type name (e.g., "transfer", "" for all)
+
+        Returns:
+            Self for method chaining
+        """
+        self._event_type = event_type
+        return self
+
+    def filter_by_contract(self, contract_id: int) -> "WebhookQueryBuilder":
+        """
+        Filter webhooks by contract database ID.
+
+        Args:
+            contract_id: Contract database ID to filter by
+
+        Returns:
+            Self for method chaining
+        """
+        self._contract_id = contract_id
+        return self
+
+    def paginate(self, limit: int = 50, offset: int = 0) -> "WebhookQueryBuilder":
+        """
+        Set pagination parameters.
+
+        Args:
+            limit: Number of results per page (page_size)
+            offset: Number of results to skip (converted to page number)
+
+        Returns:
+            Self for method chaining
+        """
+        self._page_size = limit
+        self._page = (offset // limit) + 1 if limit > 0 else 1
+        return self
+
+    def page(self, page: int, page_size: int = 50) -> "WebhookQueryBuilder":
+        """
+        Set page number and page size directly.
+
+        Args:
+            page: Page number (1-indexed)
+            page_size: Number of results per page
+
+        Returns:
+            Self for method chaining
+        """
+        self._page = page
+        self._page_size = page_size
+        return self
+
+    def execute(self) -> PaginatedResponse[WebhookSubscription]:
+        """
+        Execute the query and return results.
+
+        Returns:
+            Paginated response containing webhooks
+        """
+        return self._client.get_webhooks(
+            page=self._page,
+            page_size=self._page_size,
+        )
+
+    def build(self) -> dict[str, Any]:
+        """
+        Build and return the query parameters without executing.
+
+        Returns:
+            Dictionary of query parameters
+        """
+        params: dict[str, Any] = {
+            "page": self._page,
+            "page_size": self._page_size,
+        }
+        if self._is_active is not None:
+            params["is_active"] = self._is_active
+        if self._event_type is not None:
+            params["event_type"] = self._event_type
+        if self._contract_id is not None:
+            params["contract_id"] = self._contract_id
+        return params
+
+
+class AsyncWebhookQueryBuilder:
+    """Async fluent builder for constructing webhook queries (issue #1281)."""
+
+    def __init__(self, client: "AsyncSoroScanClient") -> None:
+        """Initialize the builder with an async client instance."""
+        self._client = client
+        self._is_active: bool | None = None
+        self._event_type: str | None = None
+        self._contract_id: int | None = None
+        self._page: int = 1
+        self._page_size: int = 50
+
+    def filter_by_active(self, is_active: bool) -> "AsyncWebhookQueryBuilder":
+        """Filter webhooks by active status."""
+        self._is_active = is_active
+        return self
+
+    def filter_by_event_type(self, event_type: str) -> "AsyncWebhookQueryBuilder":
+        """Filter webhooks by event type."""
+        self._event_type = event_type
+        return self
+
+    def filter_by_contract(self, contract_id: int) -> "AsyncWebhookQueryBuilder":
+        """Filter webhooks by contract database ID."""
+        self._contract_id = contract_id
+        return self
+
+    def paginate(self, limit: int = 50, offset: int = 0) -> "AsyncWebhookQueryBuilder":
+        """Set pagination parameters."""
+        self._page_size = limit
+        self._page = (offset // limit) + 1 if limit > 0 else 1
+        return self
+
+    def page(self, page: int, page_size: int = 50) -> "AsyncWebhookQueryBuilder":
+        """Set page number and page size."""
+        self._page = page
+        self._page_size = page_size
+        return self
+
+    async def execute(self) -> PaginatedResponse[WebhookSubscription]:
+        """Execute the query and return results."""
+        return await self._client.get_webhooks(
+            page=self._page,
+            page_size=self._page_size,
+        )
+
+    def build(self) -> dict[str, Any]:
+        """Build and return the query parameters without executing."""
+        params: dict[str, Any] = {
+            "page": self._page,
+            "page_size": self._page_size,
+        }
+        if self._is_active is not None:
+            params["is_active"] = self._is_active
+        if self._event_type is not None:
+            params["event_type"] = self._event_type
+        if self._contract_id is not None:
+            params["contract_id"] = self._contract_id
         return params
 
 

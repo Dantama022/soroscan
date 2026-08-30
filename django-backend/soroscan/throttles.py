@@ -260,6 +260,25 @@ class GraphQLRateThrottle(RateLimitHeaderMixin, SimpleRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
+class DBExplainThrottle(SimpleRateThrottle):
+    """
+    Rate limit for the admin DB EXPLAIN endpoint (issue #1291 / #491).
+
+    Strict limit (10/min by default, configurable via
+    ENDPOINT_RATE_LIMIT_DB_EXPLAIN) to prevent abuse of potentially
+    expensive EXPLAIN ANALYZE queries even by staff users.
+    """
+
+    scope = "db_explain"
+
+    def get_cache_key(self, request, view):
+        if request.user and request.user.is_authenticated:
+            ident = request.user.pk
+        else:
+            ident = self.get_ident(request)
+        return self.cache_format % {"scope": self.scope, "ident": ident}
+
+
 class DynamicEndpointThrottle(RateLimitHeaderMixin, ScopedRateThrottle):
     """
     Dynamically applies a throttle scope to a ViewSet action or APIView.

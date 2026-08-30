@@ -107,6 +107,7 @@ MIDDLEWARE = [
     "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "soroscan.middleware.GracefulShutdownMiddleware",
     "soroscan.monitoring.ErrorRateMetricsMiddleware",
+    "soroscan.middleware.RequestLatencyMiddleware",
     "soroscan.middleware.RequestBodySizeMiddleware",
     "soroscan.middleware.MaintenanceModeMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -235,6 +236,7 @@ RATE_LIMIT_INGEST = env("RATE_LIMIT_INGEST", default="10/minute")
 RATE_LIMIT_GRAPHQL = env("RATE_LIMIT_GRAPHQL", default="60/minute")
 ENDPOINT_RATE_LIMIT_SEARCH = env("ENDPOINT_RATE_LIMIT_SEARCH", default="30/minute")
 ENDPOINT_RATE_LIMIT_STATS = env("ENDPOINT_RATE_LIMIT_STATS", default="100/minute")
+ENDPOINT_RATE_LIMIT_DB_EXPLAIN = env("ENDPOINT_RATE_LIMIT_DB_EXPLAIN", default="10/minute")
 RATE_LIMIT_UNAUTHENTICATED_IP = env("RATE_LIMIT_UNAUTHENTICATED_IP", default="30/minute")
 
 # REST Framework
@@ -268,6 +270,10 @@ REST_FRAMEWORK = {
         "graphql": RATE_LIMIT_GRAPHQL,
         "events_search": ENDPOINT_RATE_LIMIT_SEARCH,
         "contract_stats": ENDPOINT_RATE_LIMIT_STATS,
+        "db_explain": ENDPOINT_RATE_LIMIT_DB_EXPLAIN,
+        "webhook_replay": "10/hour",
+        "contract_bulk_import": "20/hour",
+        "dedup_test": "60/hour",
         "unauthenticated_ip": RATE_LIMIT_UNAUTHENTICATED_IP,
     },
 }

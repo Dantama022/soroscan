@@ -18,7 +18,7 @@ import '@testing-library/jest-dom';
 
 // ── Mock @xyflow/react so tests run without a DOM canvas ──────────────────────
 jest.mock('@xyflow/react', () => {
-  const React = require('react');
+  const React = jest.requireActual('react');
 
   const ReactFlow = ({
     nodes,

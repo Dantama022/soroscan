@@ -2,6 +2,8 @@
 
 This guide explains what to monitor, how to collect logs and metrics, and how to build useful dashboards and alerts for SoroScan.
 
+- [Structured Logging Standard](./structured-logging.md) — canonical log format, field naming, levels, error and masking rules.
+
 ## Observability Strategy
 
 - Observe three pillars: metrics, logs, and traces.

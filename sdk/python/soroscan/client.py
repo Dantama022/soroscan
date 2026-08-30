@@ -41,8 +41,10 @@ if TYPE_CHECKING:
     from soroscan.builder import (
         AsyncContractQueryBuilder,
         AsyncEventQueryBuilder,
+        AsyncWebhookQueryBuilder,
         ContractQueryBuilder,
         EventQueryBuilder,
+        WebhookQueryBuilder,
     )
 
 
@@ -116,6 +118,23 @@ class SoroScanClient:
         """
         from soroscan.builder import ContractQueryBuilder
         return ContractQueryBuilder(self)
+
+    def webhooks(self) -> "WebhookQueryBuilder":
+        """
+        Create a fluent webhook query builder (issue #1281).
+
+        Example:
+            >>> webhooks = (client.webhooks()
+            ...     .filter_by_active(True)
+            ...     .filter_by_event_type("transfer")
+            ...     .paginate(limit=20, offset=0)
+            ...     .execute())
+
+        Returns:
+            WebhookQueryBuilder instance for method chaining
+        """
+        from soroscan.builder import WebhookQueryBuilder
+        return WebhookQueryBuilder(self)
 
     def _get_headers(self) -> dict[str, str]:
         """Build request headers."""
@@ -825,6 +844,21 @@ class AsyncSoroScanClient:
         """
         from soroscan.builder import AsyncContractQueryBuilder
         return AsyncContractQueryBuilder(self)
+
+    def webhooks(self) -> "AsyncWebhookQueryBuilder":
+        """
+        Create a fluent async webhook query builder (issue #1281).
+
+        Example:
+            >>> webhooks = await (client.webhooks()
+            ...     .filter_by_active(True)
+            ...     .execute())
+
+        Returns:
+            AsyncWebhookQueryBuilder instance for method chaining
+        """
+        from soroscan.builder import AsyncWebhookQueryBuilder
+        return AsyncWebhookQueryBuilder(self)
 
     def _get_headers(self) -> dict[str, str]:
         """Build request headers."""

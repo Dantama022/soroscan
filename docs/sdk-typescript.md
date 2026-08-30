@@ -101,4 +101,4 @@ try {
 
 For more details, see the [TypeScript SDK README](https://github.com/Harbduls/soroscan/tree/main/sdk/typescript).
 
-If you want to add or maintain SDK methods, use the [SDK Development Guide](./contributing/sdk-development.md).
+If you want to add or maintain SDK methods, use the [SDK Development Guide](./contributing/sdk-development.md) and the comprehensive [SDK & Library Development Guide](./sdk/sdk-development-guide.md).

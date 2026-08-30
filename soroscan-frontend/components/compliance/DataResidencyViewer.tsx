@@ -5,7 +5,7 @@ export default function DataResidencyViewer() {
     <div className="rounded-2xl border border-green-500/20 bg-[#08142f]/50 p-5">
       <h3 className="text-lg font-bold text-green-400 mb-2">Data Residency</h3>
       <p className="text-sm text-green-300/70 mb-4">
-        Your organization's data is currently stored in the following region.
+        Your organization&apos;s data is currently stored in the following region.
       </p>
       <div className="flex items-center space-x-3 text-green-300">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10 border border-green-500/20">

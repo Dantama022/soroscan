@@ -34,7 +34,8 @@ from soroscan.webhook_signing import build_x_signature_header, public_key_base64
 
 from .cache_utils import cache_result, get_or_set_json, query_cache_ttl, stable_cache_key
 from .decorators import validate_webhook_signature
-from .models import (
+from .telemetry import tracer
+from .models import (  # noqa: E402
     APIKey,
     AdminAction,
     ArchivedEventBatch,
@@ -1259,12 +1260,19 @@ def record_event_view(request):
     data = serializer.validated_data
 
     try:
-        client = SorobanClient()
-        result = client.record_event(
-            target_contract_id=data["contract_id"],
-            event_type=data["event_type"],
-            payload_hash_hex=data["payload_hash"],
-        )
+        with tracer.start_as_current_span(
+            "event.record",
+            attributes={
+                "contract_id": data["contract_id"],
+                "event_type": data["event_type"],
+            },
+        ):
+            client = SorobanClient()
+            result = client.record_event(
+                target_contract_id=data["contract_id"],
+                event_type=data["event_type"],
+                payload_hash_hex=data["payload_hash"],
+            )
 
         if result.success:
             return Response(
@@ -1307,13 +1315,20 @@ def record_structured_event_view(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     data = serializer.validated_data
-    result = SorobanClient().record_structured_event(
-        target_contract_id=data["contract_id"],
-        event_type=data["event_type"],
-        payload_hash_hex=data["payload_hash"],
-        schema_version=data["schema_version"],
-        correlation_id_hex=data["correlation_id"],
-    )
+    with tracer.start_as_current_span(
+        "event.record",
+        attributes={
+            "contract_id": data["contract_id"],
+            "event_type": data["event_type"],
+        },
+    ):
+        result = SorobanClient().record_structured_event(
+            target_contract_id=data["contract_id"],
+            event_type=data["event_type"],
+            payload_hash_hex=data["payload_hash"],
+            schema_version=data["schema_version"],
+            correlation_id_hex=data["correlation_id"],
+        )
     if result.success:
         return Response(
             {
@@ -2815,8 +2830,23 @@ def db_explain_view(request):
     POST /api/admin/db/explain/
 
     Returns the query execution plan for a given SQL SELECT statement.
-    Secured to admin (staff) users only and rate-limited.
+    Secured to admin (staff) users only and rate-limited to 10/min
+    (configurable via ENDPOINT_RATE_LIMIT_DB_EXPLAIN) to prevent abuse
+    of expensive EXPLAIN ANALYZE queries.
     """
+    # Dedicated throttle scope check (issue #1291) — also enforce the
+    # db_explain limit even when USER rate is higher.  We manually
+    # delegate to DBExplainThrottle so function-views respect the
+    # separate bucket.
+    from soroscan.throttles import DBExplainThrottle
+
+    throttle = DBExplainThrottle()
+    if not throttle.allow_request(request, db_explain_view):  # type: ignore[arg-type]
+        return Response(
+            {"detail": f"Request was throttled. Expected available in {throttle.wait():.0f} seconds."},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
     if not request.user or not request.user.is_staff:
         return Response(
             {"error": "Admin access required."},
@@ -2836,8 +2866,34 @@ def db_explain_view(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Reject multi-statement payloads such as "SELECT 1; DROP TABLE foo"
+    # Trailing semicolon is allowed, but any additional non-whitespace
+    # statement after the first semicolon is denied.
+    stripped = sql.strip()
+    # Strip one trailing semicolon for the check, then look for any remaining semicolon
+    without_trailing = stripped.rstrip(";").strip()
+    if ";" in without_trailing:
+        return Response(
+            {"error": "Multiple statements not allowed; provide a single SELECT/WITH/EXPLAIN."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    # Also handle the case where the user supplied "SELECT 1; DROP"
+    # without_trailing already catches interior ;, but if they did "SELECT 1; "
+    # the rstrip approach would hide it — so also check count vs allowed trailing
+    if stripped.count(";") > 1 or (stripped.endswith(";") and ";" in stripped[:-1]):
+        return Response(
+            {"error": "Multiple statements not allowed; provide a single SELECT/WITH/EXPLAIN."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     analyze = bool(request.data.get("analyze", False))
     prefix = "EXPLAIN ANALYZE" if analyze else "EXPLAIN"
+    logger.info(
+        "db_explain requested by %s analyze=%s query=%.120s",
+        getattr(request.user, "username", str(getattr(request.user, "id", "unknown"))),
+        analyze,
+        sql,
+    )
 
     try:
         from django.db import connection

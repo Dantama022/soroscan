@@ -93,11 +93,14 @@ export function PieChart({ data, title }: PieChartProps) {
     "fill-terminal-yellow",
   ];
 
-  let currentAngle = -Math.PI / 2;
+  const prefixSums = data.reduce<number[]>((acc, d, i) => {
+    const prev = i === 0 ? 0 : acc[i - 1] + data[i - 1].value;
+    return [...acc, prev];
+  }, []);
   const slices = data.map((d, i) => {
     const sliceAngle = (d.value / total) * 2 * Math.PI;
-    const startAngle = currentAngle;
-    const endAngle = currentAngle + sliceAngle;
+    const startAngle = -Math.PI / 2 + (prefixSums[i] / total) * 2 * Math.PI;
+    const endAngle = startAngle + sliceAngle;
 
     const x1 = Math.cos(startAngle);
     const y1 = Math.sin(startAngle);
@@ -111,8 +114,6 @@ export function PieChart({ data, title }: PieChartProps) {
       `A 80 80 0 ${largeArc} 1 ${x2 * 80} ${y2 * 80}`,
       "Z",
     ].join(" ");
-
-    currentAngle = endAngle;
 
     return {
       pathData,
