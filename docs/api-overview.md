@@ -52,6 +52,10 @@ query GetContractWithEvents($id: String!) {
 }
 ```
 
+### Evolving the Schema
+
+Adding fields, deprecating fields, renaming types, and versioning strategy for the GraphQL schema are covered in the [GraphQL Schema Migration Guide](api-reference/graphql-schema-migration.md).
+
 ---
 
 ## Status Codes
