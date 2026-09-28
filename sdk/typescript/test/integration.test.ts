@@ -14,6 +14,13 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { SoroScanClient, SoroScanError } from "../src/client.js";
+import {
+  SoroScanAuthenticationError,
+  SoroScanAuthorizationError,
+  SoroScanNotFoundError,
+  SoroScanValidationError,
+  SoroScanConnectionError,
+} from "../src/errors.js";
 import type { Webhook } from "../src/types.js";
 
 // ---------------------------------------------------------------------------
@@ -56,8 +63,6 @@ describe("Authentication (live)", () => {
   runIntegration(
     "unauthenticated request reaches backend without throwing network error",
     async () => {
-      const client = makeClient(undefined);
-      // Remove key to simulate anonymous
       const anonClient = new SoroScanClient({
         baseUrl: LIVE_BASE_URL!,
         timeoutMs: 15_000,
@@ -67,7 +72,7 @@ describe("Authentication (live)", () => {
       } catch (err) {
         if (err instanceof SoroScanError) {
           // 401 or 403 is acceptable — backend reached
-          expect([401, 403]).toContain(err.statusCode);
+          expect([401, 403]).toContain((err as SoroScanError).statusCode);
         } else {
           throw err;
         }
@@ -75,15 +80,24 @@ describe("Authentication (live)", () => {
     }
   );
 
-  runIntegration("invalid API key returns 401", async () => {
-    const client = new SoroScanClient({
-      baseUrl: LIVE_BASE_URL!,
-      apiKey: "invalid-key-xyz",
-    });
-    await expect(client.getContracts()).rejects.toMatchObject({
-      statusCode: 401,
-    });
-  });
+  runIntegration(
+    "invalid API key raises SoroScanAuthenticationError (issue #1284)",
+    async () => {
+      const client = new SoroScanClient({
+        baseUrl: LIVE_BASE_URL!,
+        apiKey: "invalid-key-xyz",
+      });
+      try {
+        await client.getContracts();
+        throw new Error("Expected SoroScanAuthenticationError but no error was thrown");
+      } catch (err) {
+        expect(err).toBeInstanceOf(SoroScanAuthenticationError);
+        // Also catchable as the base SoroScanError
+        expect(err).toBeInstanceOf(SoroScanError);
+        expect((err as SoroScanAuthenticationError).statusCode).toBe(401);
+      }
+    }
+  );
 
   runIntegration("valid credentials allow events query", async () => {
     const client = makeClient();

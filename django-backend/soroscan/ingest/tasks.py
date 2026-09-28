@@ -1777,6 +1777,26 @@ def warm_contract_name_cache() -> int:
     return total
 
 
+@shared_task(
+    name="soroscan.ingest.tasks.emit_db_pool_metrics_task",
+    ignore_result=True,
+    soft_time_limit=30,
+    time_limit=45,
+)
+def emit_db_pool_metrics_task() -> None:
+    """Emit live DB connection pool metrics to Prometheus (issue #1289).
+
+    Reads from ``pg_stat_activity`` and updates gauges for total, active,
+    idle, wait_queue, and idle_in_transaction connection counts.  Intended
+    to run every 60 seconds via Celery beat.
+
+    This task is a no-op in non-PostgreSQL environments (e.g. SQLite in tests).
+    """
+    from soroscan.db_pool import emit_pool_metrics  # noqa: PLC0415
+
+    emit_pool_metrics()
+
+
 @shared_task
 def cleanup_old_dedup_logs(dry_run: bool = False) -> int:
     """

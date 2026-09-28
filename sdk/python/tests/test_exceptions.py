@@ -1,4 +1,4 @@
-"""Tests for SoroScan SDK exception hierarchy."""
+"""Tests for SoroScan SDK exception hierarchy (issue #1284)."""
 
 import pytest
 
@@ -6,6 +6,8 @@ from soroscan.exceptions import (
     SoroScanError,
     SoroScanAPIError,
     SoroScanAuthError,
+    SoroScanAuthenticationError,
+    SoroScanAuthorizationError,
     SoroScanNotFoundError,
     SoroScanRateLimitError,
     SoroScanValidationError,
@@ -42,12 +44,69 @@ class TestSoroScanAPIError:
 
 
 class TestSoroScanAuthError:
-    def test_auth_error(self):
+    def test_auth_error_backward_compat(self):
+        """SoroScanAuthError still works for legacy catch-all handling."""
         error = SoroScanAuthError("Invalid API key", 401, "unauthorized")
         assert error.message == "Invalid API key"
         assert error.status_code == 401
         assert error.code == "unauthorized"
         assert isinstance(error, SoroScanAPIError)
+
+
+class TestSoroScanAuthenticationError:
+    """Issue #1284 — 401 authentication errors have their own subclass."""
+
+    def test_authentication_error_default_status(self):
+        error = SoroScanAuthenticationError("Bad credentials")
+        assert error.status_code == 401
+        assert isinstance(error, SoroScanAuthError)
+        assert isinstance(error, SoroScanAPIError)
+        assert isinstance(error, SoroScanError)
+
+    def test_authentication_error_custom_code(self):
+        error = SoroScanAuthenticationError("Token expired", code="token_expired")
+        assert error.code == "token_expired"
+        assert error.status_code == 401
+
+    def test_authentication_error_not_authorization(self):
+        error = SoroScanAuthenticationError("No key")
+        assert not isinstance(error, SoroScanAuthorizationError)
+
+    def test_authentication_error_with_response_data(self):
+        data = {"hint": "Check your API key in the dashboard."}
+        error = SoroScanAuthenticationError("Unauthorized", response_data=data)
+        assert error.response_data == data
+
+
+class TestSoroScanAuthorizationError:
+    """Issue #1284 — 403 forbidden errors have their own subclass."""
+
+    def test_authorization_error_default_status(self):
+        error = SoroScanAuthorizationError("Forbidden")
+        assert error.status_code == 403
+        assert isinstance(error, SoroScanAuthError)
+        assert isinstance(error, SoroScanAPIError)
+        assert isinstance(error, SoroScanError)
+
+    def test_authorization_error_custom_code(self):
+        error = SoroScanAuthorizationError("No permission", code="insufficient_scope")
+        assert error.code == "insufficient_scope"
+        assert error.status_code == 403
+
+    def test_authorization_error_not_authentication(self):
+        error = SoroScanAuthorizationError("Forbidden")
+        assert not isinstance(error, SoroScanAuthenticationError)
+
+    def test_catching_as_auth_error_catches_both(self):
+        """SoroScanAuthError catches both 401 and 403 for backward compat."""
+        errors = [
+            SoroScanAuthenticationError("401"),
+            SoroScanAuthorizationError("403"),
+        ]
+        for err in errors:
+            assert isinstance(err, SoroScanAuthError), (
+                f"{type(err).__name__} should be catchable as SoroScanAuthError"
+            )
 
 
 class TestSoroScanNotFoundError:
@@ -169,3 +228,22 @@ class TestErrorInheritance:
         assert isinstance(timeout_error, SoroScanNetworkError)
         assert isinstance(timeout_error, SoroScanTimeoutError)
         assert not isinstance(timeout_error, SoroScanConnectionError)
+
+    def test_all_api_errors_catchable_as_soroscan_error(self):
+        """All SDK errors bubble up to SoroScanError for simple catch-all."""
+        errors: list[SoroScanError] = [
+            SoroScanAPIError("api", 500),
+            SoroScanAuthenticationError("auth"),
+            SoroScanAuthorizationError("authz"),
+            SoroScanNotFoundError("nf", 404, "nf"),
+            SoroScanRateLimitError("rl", 429, "rl"),
+            SoroScanValidationError("val", 400, "val"),
+            SoroScanServerError("sv", 500, "sv"),
+            SoroScanNetworkError("net"),
+            SoroScanTimeoutError("timeout"),
+            SoroScanConnectionError("conn"),
+        ]
+        for err in errors:
+            assert isinstance(err, SoroScanError), (
+                f"{type(err).__name__} should be catchable as SoroScanError"
+            )

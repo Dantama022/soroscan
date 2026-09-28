@@ -226,6 +226,11 @@ CACHES = {
 }
 # TTL for REST/GraphQL search, stats, and timeline responses (seconds)
 QUERY_CACHE_TTL_SECONDS = env.int("QUERY_CACHE_TTL_SECONDS", default=60)
+# TTL for the REST GET /contracts list endpoint (issue #1288 — 30 seconds)
+CONTRACTS_LIST_CACHE_TTL_SECONDS = env.int("CONTRACTS_LIST_CACHE_TTL_SECONDS", default=30)
+# GraphQL query result caching (issue #1288 — 60 seconds TTL)
+GRAPHQL_CACHE_ENABLED = env.bool("GRAPHQL_CACHE_ENABLED", default=True)
+GRAPHQL_CACHE_TTL_SECONDS = env.int("GRAPHQL_CACHE_TTL_SECONDS", default=60)
 
 # Rate limiting configuration (via environment variables)
 RATE_LIMIT_ANON = env("RATE_LIMIT_ANON", default="60/minute")
@@ -407,6 +412,11 @@ CELERY_BEAT_SCHEDULE = {
     "warm-contract-name-cache": {
         "task": "soroscan.ingest.tasks.warm_contract_name_cache",
         "schedule": 86400,
+    },
+    # Issue #1289 — emit pg_stat_activity metrics to Prometheus every 60 s
+    "emit-db-pool-metrics": {
+        "task": "soroscan.ingest.tasks.emit_db_pool_metrics_task",
+        "schedule": 60,
     },
 }
 

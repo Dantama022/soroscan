@@ -33,7 +33,7 @@ import requests as http_requests
 from soroscan.throttles import IngestRateThrottle, UnauthenticatedIPRateThrottle
 from soroscan.webhook_signing import build_x_signature_header, public_key_base64
 
-from .cache_utils import cache_result, get_or_set_json, query_cache_ttl, stable_cache_key
+from .cache_utils import cache_result, get_or_set_json, query_cache_ttl, stable_cache_key, contracts_list_cache_ttl
 from .decorators import validate_webhook_signature
 from .telemetry import tracer
 from .models import (  # noqa: E402
@@ -153,9 +153,16 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
                     warnings.append(warning)
         return warnings
 
-    @method_decorator(cache_control(max_age=query_cache_ttl()))
+    @method_decorator(cache_control(max_age=contracts_list_cache_ttl()))
     def list(self, request, *args, **kwargs):
-        """Cache the contracts list per user (issue #1011)."""
+        """Cache the contracts list per user with a 30-second TTL (issue #1288)."""
+        # Honour cache-busting (Cache-Control: no-cache from client).
+        if getattr(request, "_cache_busting", False):
+            response = super().list(request, *args, **kwargs)
+            if isinstance(response.data, dict) and "results" in response.data:
+                response.data["warnings"] = self._collect_warnings(response.data["results"])
+            return response
+
         user_id = request.user.id if request.user and request.user.is_authenticated else "anon"
         page = request.query_params.get("page", "1")
         page_size = request.query_params.get("page_size", "default")
@@ -170,7 +177,7 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
                 response.data["warnings"] = self._collect_warnings(response.data["results"])
             return response.data
 
-        data = get_or_set_json(cache_key, query_cache_ttl(), _build)
+        data = get_or_set_json(cache_key, contracts_list_cache_ttl(), _build)
         return Response(data)
 
     def retrieve(self, request, *args, **kwargs):
@@ -2936,10 +2943,19 @@ def db_explain_view(request):
         name="CacheStatsResponse",
         fields={
             "backend": serializers.CharField(),
-            "default_ttl": serializers.IntegerField(),
+            "query_cache_ttl": serializers.IntegerField(),
+            "contracts_list_cache_ttl": serializers.IntegerField(),
             "status": serializers.CharField(),
+            "redis": serializers.DictField(child=serializers.CharField(allow_null=True)),
+            "prometheus": serializers.DictField(child=serializers.FloatField()),
         },
     ),
+    description=(
+        "Return cache backend information and Redis operational statistics. "
+        "Includes hit/miss counts from Prometheus and live Redis INFO metrics. "
+        "**Staff access required.**"
+    ),
+    tags=["admin"],
 )
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -2949,15 +2965,52 @@ def cache_stats_view(request):
     GET /api/cache/stats/
 
     Returns cache hit/miss statistics and current cache backend info.
-    """
-    from django.core.cache import cache as django_cache
 
-    backend_info = str(type(django_cache._cache).__name__)
+    Requires staff authentication — non-staff users receive 403.
+    Redis statistics are collected live from the Redis INFO command.
+    """
+    if not request.user.is_staff:
+        return Response(
+            {"detail": "Admin access required."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    from django.core.cache import cache as django_cache
+    from .cache_utils import get_cache_redis_info, contracts_list_cache_ttl
+
+    backend_class = type(django_cache).__name__
+    try:
+        inner = getattr(django_cache, "_cache", None)
+        backend_info = f"{backend_class}({type(inner).__name__})" if inner else backend_class
+    except Exception:
+        backend_info = backend_class
+
+    redis_info = get_cache_redis_info()
+
+    # Collect Prometheus cache counters (best-effort).
+    prom_stats: dict[str, float] = {}
+    try:
+        from prometheus_client import REGISTRY as _REGISTRY
+        for metric in _REGISTRY.collect():
+            if metric.name in (
+                "soroscan_cache_hits_total",
+                "soroscan_cache_misses_total",
+            ):
+                for sample in metric.samples:
+                    if sample.name.endswith("_total"):
+                        label = sample.labels.get("cache_type", "unknown")
+                        key = f"{metric.name.replace('soroscan_', '')}_{label}"
+                        prom_stats[key] = sample.value
+    except Exception:
+        logger.debug("Could not collect Prometheus cache counters for stats view.")
 
     return Response({
         "backend": backend_info,
-        "default_ttl": getattr(settings, "QUERY_CACHE_TTL_SECONDS", 60),
-        "status": "ok",
+        "query_cache_ttl": getattr(settings, "QUERY_CACHE_TTL_SECONDS", 60),
+        "contracts_list_cache_ttl": contracts_list_cache_ttl(),
+        "status": "ok" if redis_info else "degraded",
+        "redis": redis_info,
+        "prometheus": prom_stats,
     })
 
 

@@ -9,9 +9,13 @@ from pydantic import TypeAdapter
 from soroscan.exceptions import (
     SoroScanAPIError,
     SoroScanAuthError,
+    SoroScanAuthenticationError,
+    SoroScanAuthorizationError,
+    SoroScanConnectionError,
     SoroScanNotFoundError,
     SoroScanRateLimitError,
     SoroScanServerError,
+    SoroScanTimeoutError,
     SoroScanValidationError,
 )
 from soroscan.models import (
@@ -169,8 +173,14 @@ class SoroScanClient:
                 value=error_data.get("value"),
                 errors=error_data.get("errors"),
             )
-        elif response.status_code == 401 or response.status_code == 403:
-            raise SoroScanAuthError(error_message, response.status_code, error_code, error_data)
+        elif response.status_code == 401:
+            raise SoroScanAuthenticationError(
+                error_message, response.status_code, error_code, error_data
+            )
+        elif response.status_code == 403:
+            raise SoroScanAuthorizationError(
+                error_message, response.status_code, error_code, error_data
+            )
         elif response.status_code == 404:
             raise SoroScanNotFoundError(
                 error_message,
@@ -194,6 +204,21 @@ class SoroScanClient:
             raise SoroScanServerError(error_message, response.status_code, error_code, error_data)
         else:
             raise SoroScanAPIError(error_message, response.status_code, error_code, error_data)
+
+    def _safe_request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """Execute an httpx request, converting network exceptions to typed SDK errors."""
+        try:
+            return self._client.request(method, url, **kwargs)
+        except httpx.TimeoutException as exc:
+            raise SoroScanTimeoutError(
+                f"Request timed out after {self.timeout}s: {exc}",
+                url=url,
+                timeout=self.timeout,
+            ) from exc
+        except httpx.ConnectError as exc:
+            raise SoroScanConnectionError(f"Could not connect to {url}: {exc}", url=url) from exc
+        except httpx.NetworkError as exc:
+            raise SoroScanConnectionError(f"Network error reaching {url}: {exc}", url=url) from exc
 
     def get_contracts(
         self,
@@ -892,8 +917,14 @@ class AsyncSoroScanClient:
                 value=error_data.get("value"),
                 errors=error_data.get("errors"),
             )
-        elif response.status_code == 401 or response.status_code == 403:
-            raise SoroScanAuthError(error_message, response.status_code, error_code, error_data)
+        elif response.status_code == 401:
+            raise SoroScanAuthenticationError(
+                error_message, response.status_code, error_code, error_data
+            )
+        elif response.status_code == 403:
+            raise SoroScanAuthorizationError(
+                error_message, response.status_code, error_code, error_data
+            )
         elif response.status_code == 404:
             raise SoroScanNotFoundError(
                 error_message,
@@ -917,6 +948,22 @@ class AsyncSoroScanClient:
             raise SoroScanServerError(error_message, response.status_code, error_code, error_data)
         else:
             raise SoroScanAPIError(error_message, response.status_code, error_code, error_data)
+
+    async def _safe_request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """Execute an async httpx request, converting network exceptions to typed SDK errors."""
+        try:
+            return await self._client.request(method, url, **kwargs)
+        except httpx.TimeoutException as exc:
+            raise SoroScanTimeoutError(
+                f"Request timed out after {self.timeout}s: {exc}",
+                url=url,
+                timeout=self.timeout,
+            ) from exc
+        except httpx.ConnectError as exc:
+            raise SoroScanConnectionError(f"Could not connect to {url}: {exc}", url=url) from exc
+        except httpx.NetworkError as exc:
+            raise SoroScanConnectionError(f"Network error reaching {url}: {exc}", url=url) from exc
+
 
     async def get_contracts(
         self,

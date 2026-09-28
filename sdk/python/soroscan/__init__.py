@@ -17,9 +17,15 @@ from soroscan.client import SoroScanClient
 from soroscan.exceptions import (
     SoroScanAPIError,
     SoroScanAuthError,
+    SoroScanAuthenticationError,
+    SoroScanAuthorizationError,
+    SoroScanConnectionError,
     SoroScanError,
+    SoroScanNetworkError,
     SoroScanNotFoundError,
     SoroScanRateLimitError,
+    SoroScanServerError,
+    SoroScanTimeoutError,
     SoroScanValidationError,
 )
 from soroscan.models import (
@@ -75,8 +81,14 @@ __all__ = [
     "SoroScanError",
     "SoroScanAPIError",
     "SoroScanAuthError",
+    "SoroScanAuthenticationError",
+    "SoroScanAuthorizationError",
     "SoroScanNotFoundError",
     "SoroScanRateLimitError",
     "SoroScanValidationError",
+    "SoroScanServerError",
+    "SoroScanNetworkError",
+    "SoroScanTimeoutError",
+    "SoroScanConnectionError",
     "verify_webhook_signature",
 ]

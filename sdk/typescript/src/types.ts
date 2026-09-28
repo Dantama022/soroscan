@@ -541,8 +541,15 @@ export interface ContractStatus {
 // Errors
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface SoroScanApiError {
+/**
+ * Raw API error response body returned by the SoroScan API.
+ * @deprecated Use the typed error classes (SoroScanApiError, SoroScanAuthenticationError, etc.) instead.
+ */
+export interface SoroScanApiErrorResponse {
   code: string;
   message: string;
   details?: Record<string, unknown>;
 }
+
+/** @deprecated Renamed to SoroScanApiErrorResponse. */
+export type SoroScanApiError = SoroScanApiErrorResponse;

@@ -1,6 +1,6 @@
 import type {
   SoroScanClientConfig,
-  SoroScanApiError,
+  SoroScanApiErrorResponse,
   ContractHealth,
   GetEventsParams,
   GetEventsResponse,
@@ -36,22 +36,28 @@ import { MAX_RECENT_EVENTS_LIMIT } from "./types.js";
 import { EventQueryBuilder, ContractQueryBuilder } from "./builder.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Error class
+// Error classes — re-exported from errors.ts for backward compatibility
 // ─────────────────────────────────────────────────────────────────────────────
 
-export class SoroScanError extends Error {
-  readonly statusCode: number;
-  readonly code: string;
-  readonly details: Record<string, unknown> | undefined;
-
-  constructor(statusCode: number, apiError: SoroScanApiError) {
-    super(apiError.message);
-    this.name = "SoroScanError";
-    this.statusCode = statusCode;
-    this.code = apiError.code;
-    this.details = apiError.details;
-  }
-}
+export {
+  SoroScanError,
+  SoroScanApiError as SoroScanApiError,
+  SoroScanAuthenticationError,
+  SoroScanAuthorizationError,
+  SoroScanNotFoundError,
+  SoroScanRateLimitError,
+  SoroScanValidationError,
+  SoroScanServerError,
+  SoroScanNetworkError,
+  SoroScanTimeoutError,
+  SoroScanConnectionError,
+} from "./errors.js";
+import {
+  SoroScanError,
+  mapApiError,
+  SoroScanTimeoutError,
+  SoroScanConnectionError,
+} from "./errors.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -129,12 +135,20 @@ export class SoroScanClient {
           signal: controller.signal as RequestInit["signal"],
         });
       } catch (err) {
+        clearTimeout(timer);
         if (err instanceof Error && err.name === "AbortError") {
-          throw new Error(
-            `SoroScanClient: request timed out after ${this.#timeoutMs}ms`
+          throw new SoroScanTimeoutError(
+            `SoroScanClient: request timed out after ${this.#timeoutMs}ms`,
+            url,
+            this.#timeoutMs
           );
         }
-        throw err;
+        // Transport-level failure (DNS, connection refused, etc.)
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new SoroScanConnectionError(
+          `SoroScanClient: network error — ${msg}`,
+          url
+        );
       } finally {
         clearTimeout(timer);
       }
@@ -162,11 +176,16 @@ export class SoroScanClient {
       const json = await response.json().catch(() => null);
 
       if (!response.ok) {
-        const apiError: SoroScanApiError = json ?? {
-          code: "UNKNOWN_ERROR",
-          message: `HTTP ${response.status} ${response.statusText}`,
-        };
-        throw new SoroScanError(response.status, apiError);
+        const body = (json as Record<string, unknown> | null) ?? {};
+        const code =
+          (body["code"] as string | undefined) ??
+          (body["error"] as string | undefined) ??
+          "unknown_error";
+        const message =
+          (body["message"] as string | undefined) ??
+          (body["detail"] as string | undefined) ??
+          `HTTP ${response.status} ${response.statusText}`;
+        throw mapApiError(response.status, code, message, body);
       }
 
       return json as T;
