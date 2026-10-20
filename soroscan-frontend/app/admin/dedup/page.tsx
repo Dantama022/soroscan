@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { getAccessToken } from '@/lib/auth';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -19,6 +20,16 @@ const SUGGESTED_FIELDS = [
 ];
 
 type DedupConfig = { enabled: boolean; fields: string[] };
+
+export interface DuplicateRecord {
+  id: string;
+  contractId: string;
+  eventType: string;
+  ledger: number;
+  txHash: string;
+  reason: string;
+  timestamp: string;
+}
 
 async function apiFetch(path: string, init: RequestInit = {}) {
   const token = getAccessToken();
@@ -45,6 +56,24 @@ export default function DedupConfigPage() {
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+
+  // Duplicate records state
+  const [duplicateRecords] = React.useState<DuplicateRecord[]>([]);
+  const [filterQuery, setFilterQuery] = React.useState('');
+  const [recordsLoading] = React.useState(false);
+  const [recordsError] = React.useState<string | null>(null);
+
+  const filteredRecords = React.useMemo(() => {
+    if (!filterQuery.trim()) return duplicateRecords;
+    const q = filterQuery.toLowerCase();
+    return duplicateRecords.filter(
+      (r) =>
+        r.contractId.toLowerCase().includes(q) ||
+        r.eventType.toLowerCase().includes(q) ||
+        r.txHash.toLowerCase().includes(q) ||
+        r.reason.toLowerCase().includes(q)
+    );
+  }, [duplicateRecords, filterQuery]);
 
   const loadConfig = async () => {
     if (!contractId.trim()) return;
@@ -218,6 +247,88 @@ export default function DedupConfigPage() {
           <pre className="text-xs font-mono text-green-200 whitespace-pre-wrap border border-green-900/30 p-3">
             {testResult}
           </pre>
+        )}
+      </div>
+
+      {/* Duplicate Records Table Section */}
+      <div className="space-y-4 border border-green-900/40 p-4 bg-black/40" data-testid="dedup-records-section">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-mono text-green-400">Duplicate Records Log</h2>
+            <p className="text-xs font-mono text-gray-500">Filtered deduplication audit log events</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              className="bg-gray-950 border border-green-900/50 px-3 py-1.5 text-xs font-mono text-green-300 placeholder:text-gray-600 rounded"
+              placeholder="Filter duplicate records…"
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              data-testid="dedup-filter-input"
+            />
+            {filterQuery && (
+              <button
+                type="button"
+                onClick={() => setFilterQuery('')}
+                className="text-xs font-mono text-gray-400 hover:text-green-300 px-2 py-1"
+                data-testid="dedup-reset-filters"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        {recordsLoading ? (
+          <div className="text-xs font-mono text-gray-500 animate-pulse py-8 text-center" data-testid="dedup-loading">
+            Loading deduplication records…
+          </div>
+        ) : recordsError ? (
+          <div className="text-xs font-mono text-red-400 py-4" data-testid="dedup-error">
+            {recordsError}
+          </div>
+        ) : filteredRecords.length === 0 ? (
+          <EmptyState
+            data-testid="dedup-empty-state"
+            variant="terminal"
+            title="No duplicate records"
+            description="No duplicate records match the current filters."
+            action={
+              filterQuery
+                ? {
+                    label: "Reset filters",
+                    onClick: () => setFilterQuery(""),
+                    terminalVariant: "primary",
+                  }
+                : undefined
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto rounded border border-green-900/40">
+            <table className="w-full text-xs font-mono" data-testid="dedup-table">
+              <thead className="bg-gray-950 border-b border-green-900/40">
+                <tr className="text-gray-400">
+                  <th className="text-left px-3 py-2">Contract</th>
+                  <th className="text-left px-3 py-2">Event Type</th>
+                  <th className="text-right px-3 py-2">Ledger</th>
+                  <th className="text-left px-3 py-2">Tx Hash</th>
+                  <th className="text-left px-3 py-2">Reason</th>
+                  <th className="text-left px-3 py-2">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRecords.map((r) => (
+                  <tr key={r.id} className="border-t border-gray-900 hover:bg-gray-900/40">
+                    <td className="px-3 py-2 text-green-300 font-semibold">{r.contractId}</td>
+                    <td className="px-3 py-2 text-cyan-400">{r.eventType}</td>
+                    <td className="px-3 py-2 text-right text-gray-300">{r.ledger}</td>
+                    <td className="px-3 py-2 text-gray-400">{r.txHash}</td>
+                    <td className="px-3 py-2 text-yellow-400">{r.reason}</td>
+                    <td className="px-3 py-2 text-gray-500">{new Date(r.timestamp).toLocaleTimeString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

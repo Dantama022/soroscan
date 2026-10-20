@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/ui/empty-state';
 import { SyncStatusCard } from './SyncStatusCard';
 import type { CDCSyncProgress } from './types';
 
@@ -71,12 +72,12 @@ export function CDCSyncDashboard({
           Loading sync data…
         </div>
       ) : syncs.length === 0 ? (
-        <div
-          className="text-sm font-mono text-gray-600 py-10 text-center border border-green-900/30 rounded-lg bg-gray-950"
+        <EmptyState
           data-testid="dashboard-empty"
-        >
-          No active CDC syncs configured.
-        </div>
+          variant="terminal"
+          title="No CDC records"
+          description="No change-data-capture records are available for the current selection."
+        />
       ) : (
         <div
           className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface EventRow {
   contractId: string;
@@ -82,6 +83,15 @@ export default function QueryBuilderReportPage() {
   const [scheduleEmail, setScheduleEmail] = useState("");
   const [scheduleFrequency, setScheduleFrequency] = useState<"daily" | "weekly">("daily");
   const [scheduleTime, setScheduleTime] = useState("09:00");
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [isQueryRunning] = useState(false);
+
+  const resetFilters = () => {
+    setContractFilter("");
+    setEventTypeFilter("");
+    setRowLimit(1000);
+    setQueryError(null);
+  };
 
   const rows = useMemo(() => {
     const filtered = sourceRows.filter((row) => {
@@ -274,27 +284,69 @@ export default function QueryBuilderReportPage() {
         </section>
 
         {/* Data Preview Table */}
-        <section className="rounded border border-terminal-green/20 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-terminal-green/5">
-              <tr>
-                {columns.map((column) => (
-                  <th key={column} className="px-3 py-2 text-left">{column}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.txHash} className="border-t border-terminal-green/10 hover:bg-terminal-green/5">
+        <section
+          className="rounded border border-terminal-green/20 overflow-hidden"
+          data-testid="query-builder-results"
+        >
+          {isQueryRunning ? (
+            <div
+              role="status"
+              aria-label="Running query"
+              className="p-12 text-center text-sm text-terminal-gray animate-pulse font-terminal-mono"
+            >
+              Running query…
+            </div>
+          ) : queryError ? (
+            <div
+              role="alert"
+              className="p-8 text-center space-y-3 font-terminal-mono"
+              data-testid="query-builder-error"
+            >
+              <p className="text-sm text-terminal-danger font-semibold">
+                Query execution failed
+              </p>
+              <p className="text-xs text-terminal-gray max-w-md mx-auto">{queryError}</p>
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="rounded border border-terminal-danger/40 px-3 py-1.5 text-xs text-terminal-danger hover:bg-terminal-danger/10"
+              >
+                Reset filters
+              </button>
+            </div>
+          ) : rows.length === 0 ? (
+            <EmptyState
+              variant="terminal"
+              title="No matching query results"
+              description="Your query completed successfully, but returned no matching records. Adjust your filter criteria or reset filters to view all events."
+              action={{
+                label: "Reset filters",
+                onClick: resetFilters,
+                terminalVariant: "primary",
+              }}
+            />
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-terminal-green/5">
+                <tr>
                   {columns.map((column) => (
-                    <td key={`${row.txHash}-${column}`} className="px-3 py-2">
-                      {String(row[column])}
-                    </td>
+                    <th key={column} className="px-3 py-2 text-left">{column}</th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.txHash} className="border-t border-terminal-green/10 hover:bg-terminal-green/5">
+                    {columns.map((column) => (
+                      <td key={`${row.txHash}-${column}`} className="px-3 py-2">
+                        {String(row[column])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </section>
 
         {/* Save Report Section */}

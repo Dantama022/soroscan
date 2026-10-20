@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/ui/empty-state';
 import type { ReconciliationJob } from './types';
 
 export interface ReconciliationHistoryProps {
@@ -30,9 +31,12 @@ function ProgressBar({ percent }: { percent: number }) {
 export function ReconciliationHistory({ jobs, className }: ReconciliationHistoryProps) {
   if (jobs.length === 0) {
     return (
-      <p className="text-sm font-mono text-gray-500 py-4" data-testid="reconciliation-history-empty">
-        No reconciliation jobs found.
-      </p>
+      <EmptyState
+        data-testid="reconciliation-history-empty"
+        variant="terminal"
+        title="No reconciliation jobs"
+        description="No reconciliation records are available for the current selection."
+      />
     );
   }
 
