@@ -77,3 +77,19 @@ scenarios:
       url: http://127.0.0.1:8000/api/ingest/health/
       healthy_status: 200
       timeout_seconds: 120
+
+  - name: worker_pod_termination
+    description: Kill the default-queue worker pod and verify task processing recovers.
+    namespace: chaos-testing
+    selector: app=soroscan,component=worker-default
+    action:
+      type: worker_pod_termination
+      deployment: soroscan-worker-default
+      compose_service: worker-default
+    expected:
+      behavior: Kubernetes replaces the worker and it completes a queued Celery probe task.
+      cleanup: The worker deployment returns to its configured replica count.
+    recovery:
+      url: http://127.0.0.1:8000/ready/
+      healthy_status: 200
+      timeout_seconds: 120

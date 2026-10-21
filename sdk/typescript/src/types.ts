@@ -15,7 +15,7 @@ export interface SoroScanClientConfig {
   initialDelayMs?: number;
   /** Maximum full-jitter backoff ceiling in milliseconds (default: 10_000) */
   maxDelayMs?: number;
-  /** User-Agent header sent with every request (default: "SoroScan-TS-SDK/1.4.0") */
+  /** User-Agent header sent with every request (default: DEFAULT_USER_AGENT). */
   userAgent?: string;
 }
 
@@ -213,6 +213,14 @@ export interface GetContractParams {
   contractId: ContractId;
 }
 
+/** Event type summary returned by the SC-17 contract event-types endpoint. */
+export interface ContractEventTypeInfo {
+  event_type: EventType;
+  count: number;
+  first_seen: ISODateString;
+  last_seen: ISODateString;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Transactions
 // ─────────────────────────────────────────────────────────────────────────────
@@ -388,6 +396,21 @@ export interface UpdateWebhookParams {
 export interface WebhookListResponse {
   items: Webhook[];
   totalCount: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SC-17: Contract event type info
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ContractEventTypeInfo {
+  /** Event type name */
+  eventType: string;
+  /** Number of events of this type */
+  count: number;
+  /** ISO timestamp of first occurrence */
+  firstSeen: string;
+  /** ISO timestamp of last occurrence */
+  lastSeen: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

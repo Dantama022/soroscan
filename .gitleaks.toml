@@ -1,0 +1,55 @@
+# Gitleaks configuration (issue #1723).
+#
+# Extends the upstream default ruleset and allowlists known false positives:
+# placeholder credentials in docs/examples, mock fixtures, and public Stellar
+# contract IDs (which match the generic-api-key entropy heuristics).
+#
+# Run locally:
+#   gitleaks git --config .gitleaks.toml          # full history
+#   gitleaks dir --config .gitleaks.toml .        # working tree
+#
+# To silence a single false positive inline, append `# gitleaks:allow`
+# (or `// gitleaks:allow`) to the offending line.
+
+title = "SoroScan gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "SoroScan false positives"
+
+# Documentation, examples, and mock fixtures that intentionally contain
+# placeholder tokens.
+paths = [
+  '''(?i)\.(md|mdx)$''',
+  '''(^|/)\.env\.example$''',
+  '''^soroscan-frontend/lib/docs-content\.ts$''',
+  '''^soroscan-frontend/app/docs/''',
+  '''^soroscan-frontend/components/developer/''',
+  '''^soroscan-frontend/app/webhooks/mock-data\.ts$''',
+  '''^sdk/python/tests/conftest\.py$''',
+  '''^k8s/secret-reference\.yaml$''',
+  '''(^|/)(package-lock\.json|pnpm-lock\.yaml|Cargo\.lock|poetry\.lock)$''',
+]
+
+# Placeholder values and public on-chain identifiers.
+regexTarget = "match"
+regexes = [
+  # Obvious placeholders: YOUR_TOKEN, YOUR_API_KEY, <token>, ${TOKEN}, etc.
+  '''(?i)your[_-]?(access[_-]?)?(token|api[_-]?key|key|secret)''',
+  '''<[A-Za-z_-]+>''',
+  '''\$\{\{?\s*[A-Za-z_.]+\s*\}?\}''',
+  # Truncated example values such as "sk_live_xyz123..." or "eyJhbGc..."
+  '''[A-Za-z0-9_\-]+\.\.\.''',
+  # Stellar contract (C...) / account (G...) strkeys are public, not secrets.
+  '''\b[CG][A-Z2-7]{55}\b''',
+]
+
+stopwords = [
+  "example",
+  "placeholder",
+  "changeme",
+  "dummy",
+  "test-secret",
+]

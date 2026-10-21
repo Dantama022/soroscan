@@ -36,3 +36,25 @@ spec:
       scheme: http
       # If /metrics is behind TLS, change scheme to https and configure
       # tlsConfig accordingly.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: soroscan-workers
+  namespace: soroscan
+  labels:
+    app: soroscan-worker-metrics
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app: soroscan-worker-metrics
+  namespaceSelector:
+    matchNames:
+      - soroscan
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      scheme: http

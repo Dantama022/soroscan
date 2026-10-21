@@ -27,3 +27,8 @@ repos:
     rev: 5.13.2
     hooks:
     -   id: isort
+# Issue #1723: block committing secrets. Config/allowlist lives in .gitleaks.toml.
+-   repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+    -   id: gitleaks

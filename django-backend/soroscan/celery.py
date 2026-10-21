@@ -11,6 +11,8 @@ from celery.signals import (
     task_postrun,
     task_prerun,
     task_retry,
+    worker_ready,
+    worker_process_shutdown,
     worker_shutdown,
     worker_shutting_down,
 )
@@ -51,6 +53,36 @@ app.Task = ContextPropagatingTask
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 _task_started_at: dict[str, float] = {}
+_metrics_http_server = None
+
+
+@worker_ready.connect
+def start_prometheus_metrics_server(**kwargs):
+    """Expose metrics collected from Celery's prefork worker processes."""
+    global _metrics_http_server
+    if _metrics_http_server is not None or not os.getenv("PROMETHEUS_MULTIPROC_DIR"):
+        return
+
+    from prometheus_client import CollectorRegistry, multiprocess, start_http_server
+
+    registry = CollectorRegistry()
+    multiprocess.MultiProcessCollector(registry)
+    _metrics_http_server, _ = start_http_server(
+        int(os.getenv("PROMETHEUS_METRICS_PORT", "9100")),
+        addr="0.0.0.0",
+        registry=registry,
+    )
+
+
+@worker_process_shutdown.connect
+def mark_prometheus_worker_process_dead(pid=None, **kwargs):
+    """Remove dead child-process gauges when Celery recycles a worker."""
+    if pid is None or not os.getenv("PROMETHEUS_MULTIPROC_DIR"):
+        return
+
+    from prometheus_client import multiprocess
+
+    multiprocess.mark_process_dead(pid)
 
 
 @task_prerun.connect
@@ -158,3 +190,9 @@ def _celery_worker_shutdown(sender, **kwargs):
 @app.task(bind=True, ignore_result=True)
 def debug_task(self):
     print(f"Request: {self.request!r}")
+
+
+@app.task(name="soroscan.celery.chaos_probe")
+def chaos_probe():
+    """Return a result so chaos tests can verify that a worker processed a task."""
+    return "ok"

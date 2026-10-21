@@ -39,6 +39,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_SCENARIOS = ROOT / "scenarios.yaml"
 SUPPORTED_ACTIONS = {
     "pod_termination",
+    "worker_pod_termination",
     "network_latency",
     "memory_exhaustion",
     "cpu_throttling",
@@ -125,6 +126,44 @@ def build_kubernetes_commands(scenario: Scenario) -> list[list[str]]:
                 "--field-selector=status.phase=Running",
                 "--wait=false",
             ]
+        ]
+
+    if action_type == "worker_pod_termination":
+        deployment = action["deployment"]
+        return [
+            [
+                "kubectl",
+                "-n",
+                namespace,
+                "delete",
+                "pod",
+                "-l",
+                selector,
+                "--field-selector=status.phase=Running",
+                "--wait=false",
+            ],
+            [
+                "kubectl",
+                "-n",
+                namespace,
+                "rollout",
+                "status",
+                f"deployment/{deployment}",
+                "--timeout=120s",
+            ],
+            [
+                "kubectl",
+                "-n",
+                namespace,
+                "exec",
+                "deploy/soroscan-backend",
+                "--",
+                "python",
+                "-c",
+                "from soroscan.celery import app; "
+                "result = app.send_task('soroscan.celery.chaos_probe'); "
+                "assert result.get(timeout=60) == 'ok'",
+            ],
         ]
 
     if action_type == "network_latency":
@@ -220,6 +259,54 @@ def build_compose_commands(scenario: Scenario) -> list[list[str]]:
         return [
             ["docker", "compose", "-f", "docker-compose.chaos.yml", "kill", service],
             ["docker", "compose", "-f", "docker-compose.chaos.yml", "start", service],
+        ]
+    if action_type == "worker_pod_termination":
+        probe = (
+            "from soroscan.celery import app; "
+            "result = app.send_task('soroscan.celery.chaos_probe'); "
+            "assert result.get(timeout=60) == 'ok'"
+        )
+        return [
+            [
+                "docker",
+                "compose",
+                "-f",
+                "docker-compose.yml",
+                "-f",
+                "docker-compose.chaos.yml",
+                "--project-name",
+                "soroscan-chaos",
+                "kill",
+                service,
+            ],
+            [
+                "docker",
+                "compose",
+                "-f",
+                "docker-compose.yml",
+                "-f",
+                "docker-compose.chaos.yml",
+                "--project-name",
+                "soroscan-chaos",
+                "start",
+                service,
+            ],
+            [
+                "docker",
+                "compose",
+                "-f",
+                "docker-compose.yml",
+                "-f",
+                "docker-compose.chaos.yml",
+                "--project-name",
+                "soroscan-chaos",
+                "exec",
+                "-T",
+                "web",
+                "python",
+                "-c",
+                probe,
+            ],
         ]
     if action_type == "network_latency":
         latency = int(scenario.action["latency_ms"])

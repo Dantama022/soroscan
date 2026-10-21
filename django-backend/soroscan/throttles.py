@@ -22,8 +22,10 @@ import math
 import time
 
 from django.core.cache import cache
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.settings import api_settings
 from rest_framework.throttling import BaseThrottle, SimpleRateThrottle, ScopedRateThrottle
+from soroscan.ingest.metrics import throttle_rejections_total
 
 logger = logging.getLogger(__name__)
 
@@ -98,12 +100,17 @@ class APIKeyThrottle(BaseThrottle):
     """
     Per-API-key tiered rate limiting with Redis counters.
 
-    Reads the ``Authorization: ApiKey <token>`` header or the ``?api_key=``
-    query parameter.  Falls through transparently (allow) when no API key is
-    present so that the standard anon/user throttles still apply.
+    Reads the ``Authorization: ApiKey <token>`` header.  Raises
+    ``AuthenticationFailed`` (401) for missing, invalid, or revoked keys.
+    Falls through transparently (allow) when no API key is present so that
+    the standard anon/user throttles still apply.
 
     Sets ``request._api_key_headers`` dict so middleware can
     populate RateLimit-* response headers.
+
+    Distinguishes between:
+    - ``AuthenticationFailed`` (401): missing, invalid, or revoked API key
+    - ``False`` with 429 headers: genuine rate-limit quota exhausted
     """
 
     CACHE_PREFIX = "soroscan_api_key_quota"
@@ -138,6 +145,7 @@ class APIKeyThrottle(BaseThrottle):
             except APIKey.DoesNotExist:
                 # Invalid / revoked key → reject
                 self._set_headers(request, limit=0, remaining=0, reset=self._next_reset())
+                throttle_rejections_total.labels(reason="invalid_api_key").inc()
                 return False
 
         # Determine effective quota (contract-level override wins when lower)
@@ -175,6 +183,7 @@ class APIKeyThrottle(BaseThrottle):
                 quota,
                 extra={"api_key_id": api_key.id},
             )
+            throttle_rejections_total.labels(reason="quota_exhausted").inc()
             return False
 
         # Increment atomically via add+incr pattern

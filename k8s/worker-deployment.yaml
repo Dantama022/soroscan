@@ -17,21 +17,24 @@ spec:
       labels:
         app: soroscan
         component: worker-high
+        metrics: "true"
     spec:
       containers:
         - name: worker
           image: soroscan/backend:v1.0.0
-          command:
-            - celery
-            - -A
-            - soroscan
-            - worker
-            - --loglevel=info
-            - --concurrency=8
-            - --queues=high_priority
-            - --max-tasks-per-child=1000
-            - --stop-timeout=30
+          command: ["sh", "-c"]
+          args:
+            - mkdir -p /tmp/prometheus-multiproc && rm -f /tmp/prometheus-multiproc/* && exec celery -A soroscan worker --loglevel=info --concurrency=8 --queues=high_priority --max-tasks-per-child=1000 --stop-timeout=30
           workingDir: /app
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          env:
+            - name: PROMETHEUS_MULTIPROC_DIR
+              value: /tmp/prometheus-multiproc
+            - name: PROMETHEUS_METRICS_PORT
+              value: "9100"
           envFrom:
             - configMapRef:
                 name: soroscan-config
@@ -44,6 +47,15 @@ spec:
             requests:
               cpu: 500m
               memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+      securityContext:
+        fsGroup: 1000
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -64,21 +76,24 @@ spec:
       labels:
         app: soroscan
         component: worker-default
+        metrics: "true"
     spec:
       containers:
         - name: worker
           image: soroscan/backend:v1.0.0
-          command:
-            - celery
-            - -A
-            - soroscan
-            - worker
-            - --loglevel=info
-            - --concurrency=4
-            - --queues=default
-            - --max-tasks-per-child=1000
-            - --stop-timeout=30
+          command: ["sh", "-c"]
+          args:
+            - mkdir -p /tmp/prometheus-multiproc && rm -f /tmp/prometheus-multiproc/* && exec celery -A soroscan worker --loglevel=info --concurrency=4 --queues=default --max-tasks-per-child=1000 --stop-timeout=30
           workingDir: /app
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          env:
+            - name: PROMETHEUS_MULTIPROC_DIR
+              value: /tmp/prometheus-multiproc
+            - name: PROMETHEUS_METRICS_PORT
+              value: "9100"
           envFrom:
             - configMapRef:
                 name: soroscan-config
@@ -91,6 +106,15 @@ spec:
             requests:
               cpu: 250m
               memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+      securityContext:
+        fsGroup: 1000
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -111,21 +135,24 @@ spec:
       labels:
         app: soroscan
         component: worker-low
+        metrics: "true"
     spec:
       containers:
         - name: worker
           image: soroscan/backend:v1.0.0
-          command:
-            - celery
-            - -A
-            - soroscan
-            - worker
-            - --loglevel=info
-            - --concurrency=4
-            - --queues=low_priority
-            - --max-tasks-per-child=1000
-            - --stop-timeout=30
+          command: ["sh", "-c"]
+          args:
+            - mkdir -p /tmp/prometheus-multiproc && rm -f /tmp/prometheus-multiproc/* && exec celery -A soroscan worker --loglevel=info --concurrency=4 --queues=low_priority --max-tasks-per-child=1000 --stop-timeout=30
           workingDir: /app
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          env:
+            - name: PROMETHEUS_MULTIPROC_DIR
+              value: /tmp/prometheus-multiproc
+            - name: PROMETHEUS_METRICS_PORT
+              value: "9100"
           envFrom:
             - configMapRef:
                 name: soroscan-config
@@ -138,6 +165,15 @@ spec:
             requests:
               cpu: 250m
               memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+      securityContext:
+        fsGroup: 1000
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -158,21 +194,24 @@ spec:
       labels:
         app: soroscan
         component: worker-backfill
+        metrics: "true"
     spec:
       containers:
         - name: worker-backfill
           image: soroscan/backend:v1.0.0
-          command:
-            - celery
-            - -A
-            - soroscan
-            - worker
-            - --loglevel=info
-            - --concurrency=2
-            - --queues=backfill
-            - --max-tasks-per-child=100
-            - --stop-timeout=30
+          command: ["sh", "-c"]
+          args:
+            - mkdir -p /tmp/prometheus-multiproc && rm -f /tmp/prometheus-multiproc/* && exec celery -A soroscan worker --loglevel=info --concurrency=2 --queues=backfill --max-tasks-per-child=100 --stop-timeout=30
           workingDir: /app
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          env:
+            - name: PROMETHEUS_MULTIPROC_DIR
+              value: /tmp/prometheus-multiproc
+            - name: PROMETHEUS_METRICS_PORT
+              value: "9100"
           envFrom:
             - configMapRef:
                 name: soroscan-config

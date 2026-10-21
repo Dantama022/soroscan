@@ -6,15 +6,13 @@ These endpoints return the cursor-based pagination shape expected by
 """
 from __future__ import annotations
 
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from soroscan.ingest.models import ContractEvent, TrackedContract
-
-from rest_framework.permissions import IsAuthenticated
-from soroscan.ingest.models import WebhookDeadLetter
+from soroscan.ingest.models import ContractEvent, TrackedContract, WebhookDeadLetter
 from soroscan.ingest.services.webhook_replay import create_replay_job
 
 
@@ -43,6 +41,7 @@ def _event_to_sdk(event: ContractEvent) -> dict:
 
 
 def _contract_to_sdk(contract: TrackedContract) -> dict:
+    verification = ContractVerification.objects.filter(contract=contract).first()
     return {
         "id": contract.contract_id,
         "network": contract.network,
@@ -54,8 +53,11 @@ def _contract_to_sdk(contract: TrackedContract) -> dict:
         "lastActivityAt": _isoformat(contract.last_event_at),
         "totalEvents": contract.events.count(),
         "spec": None,
-        "verified": False,
-        "verifiedAt": None,
+        "verified": (
+            verification is not None
+            and verification.status == ContractVerification.Status.VERIFIED
+        ),
+        "verifiedAt": _isoformat(verification.verified_at) if verification else None,
         "sourceCode": None,
         "label": contract.name,
     }
@@ -69,17 +71,19 @@ def list_events(request):
 
     Query params:
     - first (int) - Maximum items to return, capped at 200 (default 20)
+    - after (string) - Return events after this ledger-event_index cursor
+    - before (string) - Return events before this ledger-event_index cursor
     - contractId (string) - Filter by Soroban contract ID
     - eventType (string) - Filter by event type label
 
     - 200: Paginated event list with pageInfo cursors
     """
     try:
-        first = min(int(request.query_params.get("first", 20)), 200)
+        first = max(0, min(int(request.query_params.get("first", 20)), 200))
     except (TypeError, ValueError):
         first = 20
 
-    queryset = ContractEvent.objects.select_related("contract").order_by("-timestamp")
+    queryset = ContractEvent.objects.select_related("contract")
 
     contract_id = request.query_params.get("contractId")
     if contract_id:
@@ -89,16 +93,86 @@ def list_events(request):
     if event_type:
         queryset = queryset.filter(event_type=event_type)
 
+    base_queryset = queryset
     total = queryset.count()
-    events = list(queryset[:first])
+
+    cursor_values: dict[str, tuple[int, int]] = {}
+    for cursor_name in ("after", "before"):
+        cursor = request.query_params.get(cursor_name)
+        if cursor is None:
+            continue
+        try:
+            ledger, event_index = (int(value) for value in cursor.split("-", 1))
+        except (ValueError, TypeError):
+            return Response(
+                {"error": f"Invalid {cursor_name} cursor"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if ledger < 0 or event_index < 0:
+            return Response(
+                {"error": f"Invalid {cursor_name} cursor"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cursor_values[cursor_name] = (ledger, event_index)
+
+    queryset = base_queryset.order_by("-ledger", "-event_index", "-id")
+    if "after" in cursor_values:
+        ledger, event_index = cursor_values["after"]
+        queryset = queryset.filter(
+            Q(ledger__lt=ledger) | Q(ledger=ledger, event_index__lt=event_index)
+        )
+    if "before" in cursor_values:
+        ledger, event_index = cursor_values["before"]
+        queryset = queryset.filter(
+            Q(ledger__gt=ledger) | Q(ledger=ledger, event_index__gt=event_index)
+        )
+
+    page_events = list(queryset[: first + 1])
+    has_more_in_range = len(page_events) > first
+    events = page_events[:first]
+
+    if events:
+        start_event = events[0]
+        end_event = events[-1]
+        has_previous_page = base_queryset.filter(
+            Q(ledger__gt=start_event.ledger)
+            | Q(
+                ledger=start_event.ledger,
+                event_index__gt=start_event.event_index,
+            )
+        ).exists()
+        has_next_page = base_queryset.filter(
+            Q(ledger__lt=end_event.ledger)
+            | Q(
+                ledger=end_event.ledger,
+                event_index__lt=end_event.event_index,
+            )
+        ).exists()
+    else:
+        has_previous_page = False
+        has_next_page = False
+        if "after" in cursor_values:
+            ledger, event_index = cursor_values["after"]
+            has_previous_page = base_queryset.filter(
+                Q(ledger__gt=ledger) | Q(ledger=ledger, event_index__gt=event_index)
+            ).exists()
+        if "before" in cursor_values:
+            ledger, event_index = cursor_values["before"]
+            has_next_page = base_queryset.filter(
+                Q(ledger__lt=ledger) | Q(ledger=ledger, event_index__lt=event_index)
+            ).exists()
+
+    if first == 0:
+        has_next_page = has_more_in_range
+
     items = [_event_to_sdk(event) for event in events]
 
     return Response(
         {
             "items": items,
             "pageInfo": {
-                "hasNextPage": total > first,
-                "hasPreviousPage": False,
+                "hasNextPage": has_next_page,
+                "hasPreviousPage": has_previous_page,
                 "startCursor": items[0]["pagingToken"] if items else None,
                 "endCursor": items[-1]["pagingToken"] if items else None,
             },
@@ -126,22 +200,84 @@ def get_contract(request, contract_id: str):
     return Response(_contract_to_sdk(contract))
 
 
+def _dead_letter_entitlement_q(user) -> Q:
+    """
+    Lookup matching the dead letters a non-staff user is allowed to act on.
+
+    A caller is entitled to a dead letter when they own the contract behind
+    its subscription, or belong to the contract's team/organization.
+    """
+    return (
+        Q(subscription__contract__owner=user)
+        | Q(subscription__contract__team__memberships__user=user)
+        | Q(subscription__contract__organization__memberships__user=user)
+    )
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def bulk_replay_dead_letters(request):
     """
     Bulk replay dead-letter webhooks.
-    Expected payload: {"dead_letter_ids": [1, 2, 3]}
+
+    Expected payload: ``{"dead_letter_ids": [1, 2, 3]}``
+
+    Restricted to staff or to users entitled to the affected subscriptions
+    (contract owner, team member, or organization member). A non-staff caller
+    who references a dead letter belonging to another tenant is rejected with
+    ``403`` rather than having those ids silently skipped, so a cross-tenant
+    replay attempt can never be mistaken for success.
     """
     dead_letter_ids = request.data.get("dead_letter_ids", [])
     if not isinstance(dead_letter_ids, list) or not dead_letter_ids:
         return Response(
-            {"error": "A non-empty list of dead_letter_ids is required."}, 
-            status=status.HTTP_400_BAD_REQUEST
+            {"error": "A non-empty list of dead_letter_ids is required."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    dead_letters = WebhookDeadLetter.objects.filter(id__in=dead_letter_ids, resolved=False).select_related('subscription', 'event')
-    
+    # Normalise to ints up front so the entitlement/ownership checks below
+    # operate on the same values the ORM will filter against.
+    try:
+        requested_ids = {int(dead_letter_id) for dead_letter_id in dead_letter_ids}
+    except (TypeError, ValueError):
+        return Response(
+            {"error": "dead_letter_ids must be a list of integers."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    is_staff = bool(request.user.is_staff)
+
+    if not is_staff:
+        # Reject any request that reaches for a dead letter outside the
+        # caller's tenant before creating a single replay job.
+        entitled_ids = set(
+            WebhookDeadLetter.objects.filter(id__in=requested_ids)
+            .filter(_dead_letter_entitlement_q(request.user))
+            .values_list("id", flat=True)
+        )
+        existing_ids = set(
+            WebhookDeadLetter.objects.filter(id__in=requested_ids).values_list(
+                "id", flat=True
+            )
+        )
+        if existing_ids - entitled_ids:
+            return Response(
+                {
+                    "error": "You do not have permission to replay one or more "
+                    "of the requested dead letters."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+    dead_letters = WebhookDeadLetter.objects.filter(
+        id__in=requested_ids, resolved=False
+    ).select_related("subscription", "event")
+
+    if not is_staff:
+        dead_letters = dead_letters.filter(
+            _dead_letter_entitlement_q(request.user)
+        ).distinct()
+
     jobs_created = []
     for dl in dead_letters:
         if dl.event:
@@ -151,10 +287,10 @@ def bulk_replay_dead_letters(request):
                 requested_by=request.user,
                 contract_id=dl.subscription.contract.contract_id,
                 event_type=dl.event.event_type,
-                limit=1
+                limit=1,
             )
             jobs_created.append(job.pk)
-            
+
             # Optionally mark as resolved or pending
             dl.resolved = True
             dl.resolution_note = f"Enqueued replay job {job.pk}"

@@ -1,9 +1,13 @@
 """Unit tests for the public v1 API shim used by Pact contracts."""
+
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from soroscan.ingest.models import ContractSource, ContractVerification
 from soroscan.ingest.tests.factories import ContractEventFactory, TrackedContractFactory
 from soroscan.pact_provider import PACT_CONTRACT_ID
 
@@ -28,6 +32,71 @@ class TestV1ApiViews:
         assert response.data["totalCount"] >= 1
         assert response.data["items"][0]["type"] == "transfer"
 
+    def test_list_events_paginates_forward_after_cursor(self, api_client):
+        contract = TrackedContractFactory(contract_id=PACT_CONTRACT_ID)
+        for ledger in (101, 102, 103):
+            ContractEventFactory(
+                contract=contract,
+                event_type="transfer",
+                ledger=ledger,
+                event_index=0,
+            )
+
+        first_page = api_client.get(reverse("v1-events"), {"first": 2})
+        second_page = api_client.get(
+            reverse("v1-events"),
+            {"first": 2, "after": first_page.data["pageInfo"]["endCursor"]},
+        )
+
+        assert [item["pagingToken"] for item in first_page.data["items"]] == [
+            "103-0",
+            "102-0",
+        ]
+        assert first_page.data["pageInfo"]["hasNextPage"] is True
+        assert first_page.data["pageInfo"]["hasPreviousPage"] is False
+        assert [item["pagingToken"] for item in second_page.data["items"]] == ["101-0"]
+        assert second_page.data["pageInfo"]["hasNextPage"] is False
+        assert second_page.data["pageInfo"]["hasPreviousPage"] is True
+        assert second_page.data["totalCount"] == 3
+
+    def test_list_events_filters_before_cursor_and_reports_page_boundaries(
+        self, api_client
+    ):
+        contract = TrackedContractFactory(contract_id=PACT_CONTRACT_ID)
+        for ledger in (101, 102, 103):
+            ContractEventFactory(
+                contract=contract,
+                event_type="transfer",
+                ledger=ledger,
+                event_index=0,
+            )
+
+        response = api_client.get(reverse("v1-events"), {"first": 1, "before": "102-0"})
+
+        assert [item["pagingToken"] for item in response.data["items"]] == ["103-0"]
+        assert response.data["pageInfo"]["hasPreviousPage"] is False
+        assert response.data["pageInfo"]["hasNextPage"] is True
+
+        after_oldest = api_client.get(
+            reverse("v1-events"), {"first": 1, "after": "101-0"}
+        )
+        assert after_oldest.data["items"] == []
+        assert after_oldest.data["pageInfo"]["hasPreviousPage"] is True
+        assert after_oldest.data["pageInfo"]["hasNextPage"] is False
+
+        before_newest = api_client.get(
+            reverse("v1-events"), {"first": 1, "before": "103-0"}
+        )
+        assert before_newest.data["items"] == []
+        assert before_newest.data["pageInfo"]["hasPreviousPage"] is False
+        assert before_newest.data["pageInfo"]["hasNextPage"] is True
+
+    def test_list_events_rejects_malformed_cursor(self, api_client):
+        response = api_client.get(reverse("v1-events"), {"after": "invalid"})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data == {"error": "Invalid after cursor"}
+
     def test_get_contract_returns_sdk_shape(self, api_client):
         TrackedContractFactory(contract_id=PACT_CONTRACT_ID, name="SDK Contract")
 
@@ -38,6 +107,34 @@ class TestV1ApiViews:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["id"] == PACT_CONTRACT_ID
         assert response.data["label"] == "SDK Contract"
+        assert response.data["verified"] is False
+        assert response.data["verifiedAt"] is None
+
+    def test_get_verified_contract_returns_verification_details(self, api_client):
+        contract = TrackedContractFactory(contract_id=PACT_CONTRACT_ID)
+        source = ContractSource.objects.create(
+            contract=contract,
+            source_file=SimpleUploadedFile("contract.rs", b"fn main() {}"),
+            uploaded_by=contract.owner,
+        )
+        verified_at = timezone.now()
+        ContractVerification.objects.create(
+            contract=contract,
+            source=source,
+            status=ContractVerification.Status.VERIFIED,
+            bytecode_hash="a" * 64,
+            verified_at=verified_at,
+        )
+
+        response = api_client.get(
+            reverse("v1-contract-detail", kwargs={"contract_id": PACT_CONTRACT_ID})
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["verified"] is True
+        assert response.data["verifiedAt"] == verified_at.isoformat().replace(
+            "+00:00", "Z"
+        )
 
     def test_get_contract_not_found(self, api_client):
         missing_id = "C" + "B" * 55

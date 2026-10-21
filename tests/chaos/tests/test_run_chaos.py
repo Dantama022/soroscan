@@ -17,6 +17,7 @@ def test_loads_all_required_scenarios():
 
     assert names == {
         "pod_termination",
+        "worker_pod_termination",
         "network_latency",
         "memory_exhaustion",
         "cpu_throttling",
@@ -31,6 +32,7 @@ def test_loads_all_required_scenarios():
     ("scenario_name", "expected_fragment"),
     [
         ("pod_termination", "delete"),
+        ("worker_pod_termination", "soroscan-worker-default"),
         ("network_latency", "tc qdisc add"),
         ("memory_exhaustion", "memory=128Mi"),
         ("cpu_throttling", "cpu=100m"),
@@ -66,6 +68,19 @@ def test_compose_backend_uses_isolated_compose_file():
     flattened = " ".join(" ".join(command) for command in commands)
     assert "docker-compose.chaos.yml" in flattened
     assert "kill" in flattened
+
+
+def test_worker_termination_checks_celery_task_completion():
+    scenarios = load_scenarios(Path(__file__).resolve().parents[1] / "scenarios.yaml")
+    scenario = next(item for item in scenarios if item.name == "worker_pod_termination")
+
+    commands = build_commands(scenario)
+    flattened = " ".join(" ".join(command) for command in commands)
+
+    assert scenario.selector == "app=soroscan,component=worker-default"
+    assert "rollout status deployment/soroscan-worker-default" in flattened
+    assert "soroscan.celery.chaos_probe" in flattened
+    assert "result.get(timeout=60) == 'ok'" in flattened
 
 
 def test_execute_requires_explicit_environment_flag(monkeypatch):

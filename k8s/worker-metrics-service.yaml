@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: soroscan-worker-metrics
+  namespace: soroscan
+  labels:
+    app: soroscan-worker-metrics
+    component: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: soroscan
+    metrics: "true"
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+      protocol: TCP
