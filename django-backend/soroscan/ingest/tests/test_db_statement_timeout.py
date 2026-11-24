@@ -67,6 +67,7 @@ class TestDatabaseStatementTimeoutSetting:
         assert settings.DATABASE_STATEMENT_TIMEOUT > 0
 
 
+@pytest.mark.django_db(transaction=True)  # a cancelled statement aborts any open transaction
 class TestDatabaseStatementTimeoutBehavior:
     """Verify that exceeding the PostgreSQL statement timeout raises
     OperationalError (the Django wrapper around psycopg2.QueryCanceledError)."""

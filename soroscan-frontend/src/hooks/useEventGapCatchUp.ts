@@ -79,6 +79,8 @@ export function useEventGapCatchUp(
       prevContractIdRef.current = contractId;
       lastReceivedLedgerRef.current = null;
       knownIdsRef.current = new Set();
+      // Reset local state when switching contracts.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRecoveredEvents([]);
       setLastRequestedRange(null);
       setLastReceivedLedger(null);

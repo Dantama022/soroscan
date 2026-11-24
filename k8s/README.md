@@ -44,12 +44,27 @@ storage settings, and hostnames to match your environment before applying.
 4. Apply the application workloads and their services:
 
    ```bash
+   kubectl apply -f k8s/serviceaccount.yaml
    kubectl apply -f k8s/backend-deployment.yaml
    kubectl apply -f k8s/worker-deployment.yaml
    kubectl apply -f k8s/beat-cronjob.yaml
    kubectl apply -f k8s/service.yaml
    kubectl apply -f k8s/worker-metrics-service.yaml
+   kubectl apply -f k8s/hpa.yaml
    ```
+
+   `hpa.yaml` requires [metrics-server](https://github.com/kubernetes-sigs/metrics-server).
+   The backend and worker deployments do not set `spec.replicas`; their
+   HorizontalPodAutoscalers own the replica count. All scale on average CPU
+   utilization relative to each container's CPU request:
+
+   | Deployment | Min | Max | CPU target |
+   | --- | --- | --- | --- |
+   | `soroscan-backend` | 2 | 10 | 70% |
+   | `soroscan-worker-high` | 1 | 8 | 75% |
+   | `soroscan-worker-default` | 1 | 6 | 75% |
+   | `soroscan-worker-low` | 1 | 4 | 75% |
+   | `soroscan-worker-backfill` | 1 | 3 | 75% |
 
 5. Apply `ingress.yaml` after configuring its hostname, ingress class, and TLS
    Secret.
@@ -67,10 +82,12 @@ storage settings, and hostnames to match your environment before applying.
 | `namespace.yaml` | Creates the `soroscan` namespace. |
 | `configmap.yaml` | Non-secret Django, RPC, and Celery configuration. |
 | `secret-reference.yaml` | Optional External Secrets Operator resource that creates `soroscan-secrets`. |
+| `serviceaccount.yaml` | Dedicated `soroscan` ServiceAccount used by the backend, worker, and beat pods, with API token automounting disabled. |
 | `backend-deployment.yaml` | Django API deployment, including migrations, static collection, and HTTP probes. |
 | `service.yaml` | ClusterIP service routing API traffic to backend pods. |
 | `worker-deployment.yaml` | High-, default-, low-priority, and backfill Celery worker deployments; exposes prefork-safe Prometheus metrics on port 9100. |
 | `worker-metrics-service.yaml` | ClusterIP service routing Prometheus scrapes to worker pods. |
+| `hpa.yaml` | CPU-based HorizontalPodAutoscalers for the backend and each worker deployment. |
 | `beat-cronjob.yaml` | Single-replica Celery beat scheduler deployment. |
 | `ingress.yaml` | External HTTP routing to the backend service. |
 | `backup-configmap.yaml` | Object-storage bucket, prefixes, and retention settings for backups. |

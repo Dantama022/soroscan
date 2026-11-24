@@ -2368,7 +2368,7 @@ mod tests {
         let env = Env::default();
         env.mock_all_auths();
 
-        let (client, admin, _indexer) = setup_contract(&env);
+        let (client, _admin, _indexer) = setup_contract(&env);
         let non_admin = Address::generate(&env);
 
         let new_wasm_hash = env

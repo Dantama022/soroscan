@@ -1,0 +1,17 @@
+apiVersion: v2
+name: soroscan
+description: SoroScan event indexing API, Celery workers, and operational resources
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+home: https://soroscan.io
+sources:
+  - https://github.com/SoroScan/soroscan
+maintainers:
+  - name: SoroScan Team
+    email: team@soroscan.io
+keywords:
+  - stellar
+  - soroban
+  - indexing
+  - django

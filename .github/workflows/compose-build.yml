@@ -1,0 +1,101 @@
+name: Compose Config & Image Build
+
+# Validates every docker-compose file schema and keeps the application
+# images buildable, so broken Compose/Dockerfile changes are caught in CI
+# instead of the first local `docker compose up --build`.
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "docker-compose.yml"
+      - "docker-compose.chaos.yml"
+      - "django-backend/Dockerfile"
+      - "django-backend/.dockerignore"
+      - "django-backend/requirements.txt"
+      - "soroscan-frontend/Dockerfile.frontend"
+      - "tools/webhook-simulator/docker-compose.yml"
+      - "tools/webhook-simulator/Dockerfile"
+      - ".github/workflows/compose-build.yml"
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "docker-compose.yml"
+      - "docker-compose.chaos.yml"
+      - "django-backend/Dockerfile"
+      - "django-backend/.dockerignore"
+      - "django-backend/requirements.txt"
+      - "soroscan-frontend/Dockerfile.frontend"
+      - "tools/webhook-simulator/docker-compose.yml"
+      - "tools/webhook-simulator/Dockerfile"
+      - ".github/workflows/compose-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compose-config:
+    name: Validate Compose files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The main Compose file mounts env_file ./django-backend/.env, which
+      # developers create locally. CI seeds it from the committed example
+      # so `config` can resolve it.
+      - name: Seed backend env file
+        run: cp django-backend/.env.example django-backend/.env
+
+      - name: Validate main Compose file
+        run: >
+          docker compose -f docker-compose.yml
+          --project-name soroscan-ci config --quiet
+
+      - name: Validate merged chaos Compose config
+        run: >
+          docker compose -f docker-compose.yml -f docker-compose.chaos.yml
+          --project-name soroscan-chaos-ci config --quiet
+
+      - name: Validate webhook-simulator Compose file
+        run: >
+          docker compose -f tools/webhook-simulator/docker-compose.yml
+          --project-name soroscan-simulator-ci config --quiet
+
+  backend-image:
+    name: Build backend image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./django-backend
+          file: ./django-backend/Dockerfile
+          tags: soroscan-backend:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test image
+        run: docker run --rm soroscan-backend:ci python --version
+
+  frontend-image:
+    name: Build frontend image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./soroscan-frontend/Dockerfile.frontend
+          tags: soroscan-frontend:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

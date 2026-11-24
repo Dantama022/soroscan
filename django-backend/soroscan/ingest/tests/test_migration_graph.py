@@ -34,9 +34,10 @@ def test_single_leaf_node():
     assert len(leaf_nodes) == 1, (
         f"Expected 1 leaf node for 'ingest', found {len(leaf_nodes)}: {leaf_nodes}"
     )
-    # Updated to reflect the newest migration leaf.
-    assert leaf_nodes[0][1].startswith("0056_"), (
-        f"Expected leaf node starting with '0056_', got '{leaf_nodes[0][1]}'"
+    # The leaf must be at or beyond the 0056 migration; do not pin an exact
+    # number so adding new migrations does not break this test.
+    assert int(leaf_nodes[0][1].split("_", 1)[0]) >= 56, (
+        f"Expected leaf node numbered >= 0056, got '{leaf_nodes[0][1]}'"
     )
 
 

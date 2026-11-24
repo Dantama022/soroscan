@@ -1,252 +1,204 @@
-// Integration tests for emit_soroscan_event! macro
-// Note: These tests require the soroscan_core contract and macro to be built together
+// Integration tests for the `emit_soroscan_event!` / `emit_soroscan_batch!`
+// proc-macros (issue #1667).
+//
+// The macros must produce the standardized SoroScan topic layout and handle
+// every payload shape a contract author might pass:
+//
+//   * a scalar payload,
+//   * a tuple payload (whose inner commas used to break the old
+//     string-splitting parser), and
+//   * the batch summary form.
+//
+// `env.events().publish` only records events inside a contract invocation, so
+// these tests register a small harness contract whose methods call the macros
+// and then inspect the recorded events via `testutils::Events::all`.
 
-#[cfg(test)]
-mod macro_integration_tests {
-    use soroban_sdk::testutils::{Address as _, Events as _};
-    use soroban_sdk::{Address, BytesN, Env};
-    use soroscan_core::{EventEntry, SoroScanCore, SoroScanCoreClient};
+use soroban_sdk::testutils::{Address as _, Events as _};
+use soroban_sdk::{
+    contract, contractimpl, symbol_short, Address, Env, Symbol, TryIntoVal, Val, Vec,
+};
+use soroscan_macros::{emit_soroscan_batch, emit_soroscan_event};
 
-    fn setup_contract(env: &Env) -> (SoroScanCoreClient<'_>, Address) {
-        env.mock_all_auths();
-        let contract_id = env.register_contract(None, SoroScanCore);
-        let client = SoroScanCoreClient::new(env, &contract_id);
-        let admin = Address::generate(env);
-        client.init(&admin);
-        (client, admin)
+#[contract]
+pub struct MacroHarness;
+
+#[contractimpl]
+impl MacroHarness {
+    /// Emit with a scalar (`u32`) payload.
+    pub fn emit_scalar(env: Env, event_type: Symbol) {
+        emit_soroscan_event!(&env, event_type, 42u32);
     }
 
-    #[test]
-    fn test_emit_soroscan_event_macro_expansion() {
-        let env = Env::default();
-        let (client, admin) = setup_contract(&env);
-        let indexer = Address::generate(&env);
-
-        // Add indexer and verify event emission
-        client.add_indexer(&admin, &indexer);
-
-        // Retrieve events emitted
-        let events = env.events().all();
-        assert!(!events.is_empty());
-
-        // Check that at least one event has the "soroscan" + "add" topics structure
-        let has_add_event = events.iter().any(|event| event.1.len() >= 2);
-        assert!(has_add_event, "Should have emitted an indexer add event");
+    /// Emit with a tuple payload. The inner commas must not be mistaken for
+    /// argument separators.
+    pub fn emit_tuple(env: Env, event_type: Symbol, from: Address, to: Address) {
+        emit_soroscan_event!(&env, event_type, (from, to, 7u32));
     }
 
-    #[test]
-    fn test_emit_soroscan_event_structure_validation() {
-        let env = Env::default();
-        let (client, admin) = setup_contract(&env);
-        let indexer = Address::generate(&env);
-        let target_contract = Address::generate(&env);
-
-        // Add indexer to whitelist
-        client.add_indexer(&admin, &indexer);
-
-        // Record an event
-        let event_type = soroban_sdk::symbol_short!("swap");
-        let payload_hash = BytesN::from_array(&env, &[1u8; 32]);
-
-        client.record_event(&indexer, &target_contract, &event_type, &payload_hash);
-
-        // Get all events
-        let all_events = env.events().all();
-
-        // Verify that event was emitted with correct XDR structure
-        let recorded_event = all_events
-            .iter()
-            .find(|event| event.1.len() >= 2)
-            .expect("Should have at least one event with multiple topics");
-
-        // Verify topics vector format
-        assert!(
-            recorded_event.1.len() >= 2,
-            "Event should have topic structure"
-        );
+    /// Emit the batch summary event.
+    pub fn emit_batch(env: Env, indexer: Address, count: u32, total: u32) {
+        emit_soroscan_batch!(&env, indexer, count, total);
     }
+}
 
-    #[test]
-    fn test_batch_event_xdr_encoding() {
-        let env = Env::default();
-        let (client, admin) = setup_contract(&env);
-        let indexer = Address::generate(&env);
+fn topic_symbol(env: &Env, topics: &Vec<Val>, index: u32) -> Symbol {
+    topics
+        .get(index)
+        .expect("topic missing")
+        .try_into_val(env)
+        .expect("topic is not a symbol")
+}
 
-        // Add indexer
-        client.add_indexer(&admin, &indexer);
+#[test]
+fn test_emit_scalar_event_topics_and_data() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MacroHarness);
+    let client = MacroHarnessClient::new(&env, &contract_id);
 
-        // Create batch entries
-        let mut entries = soroban_sdk::Vec::new(&env);
-        let target1 = Address::generate(&env);
-        let target2 = Address::generate(&env);
+    client.emit_scalar(&symbol_short!("swap"));
 
-        entries.push_back(EventEntry {
-            contract_id: target1,
-            event_type: soroban_sdk::symbol_short!("swap"),
-            payload_hash: BytesN::from_array(&env, &[10u8; 32]),
-        });
-        entries.push_back(EventEntry {
-            contract_id: target2,
-            event_type: soroban_sdk::symbol_short!("transfer"),
-            payload_hash: BytesN::from_array(&env, &[20u8; 32]),
-        });
+    let events = env.events().all();
+    assert_eq!(events.len(), 1, "should emit exactly one event");
 
-        // Record batch
-        let count = client.record_events_batch(&indexer, &entries);
-        assert_eq!(count, 2, "Should have recorded 2 events");
+    let (_contract, topics, data) = events.get(0).unwrap();
 
-        // Get all events and verify batch summary event was emitted
-        let all_events = env.events().all();
-        assert!(
-            all_events.len() >= 3,
-            "Should have multiple events including batch summary"
-        );
+    // Standard layout: ("soroscan", <event_type>).
+    assert_eq!(topics.len(), 2, "scalar event should have two topics");
+    assert_eq!(topic_symbol(&env, &topics, 0), symbol_short!("soroscan"));
+    assert_eq!(topic_symbol(&env, &topics, 1), symbol_short!("swap"));
 
-        // Verify batch summary event structure
-        let batch_event = all_events
-            .iter()
-            .find(|event| {
-                // Check for batch event - should have "soroscan" + "batch" topics
-                event.1.len() >= 2
-            })
-            .expect("Should have batch summary event");
+    // Data is the scalar payload.
+    let value: u32 = data.try_into_val(&env).expect("data should be u32");
+    assert_eq!(value, 42);
+}
 
-        assert!(batch_event.1.len() >= 2, "Batch event should have topics");
-    }
+#[test]
+fn test_emit_tuple_payload_is_not_split() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MacroHarness);
+    let client = MacroHarnessClient::new(&env, &contract_id);
 
-    #[test]
-    fn test_event_topics_and_payload_consistency() {
-        let env = Env::default();
-        let (client, admin) = setup_contract(&env);
-        let indexer = Address::generate(&env);
-        let target_contract = Address::generate(&env);
+    let from = Address::generate(&env);
+    let to = Address::generate(&env);
 
-        client.add_indexer(&admin, &indexer);
+    client.emit_tuple(&symbol_short!("transfer"), &from, &to);
 
-        // Record multiple events
-        for i in 0..3 {
-            let event_type = match i {
-                0 => soroban_sdk::symbol_short!("transfer"),
-                1 => soroban_sdk::symbol_short!("approve"),
-                _ => soroban_sdk::symbol_short!("burn"),
-            };
+    let events = env.events().all();
+    assert_eq!(events.len(), 1, "should emit exactly one event");
 
-            let mut payload_hash_bytes = [0u8; 32];
-            payload_hash_bytes[0] = i as u8;
-            let payload_hash = BytesN::from_array(&env, &payload_hash_bytes);
+    let (_contract, topics, data) = events.get(0).unwrap();
 
-            client.record_event(&indexer, &target_contract, &event_type, &payload_hash);
-        }
+    // Topics are still the standard pair, despite the payload's commas.
+    assert_eq!(topics.len(), 2, "tuple event should have two topics");
+    assert_eq!(topic_symbol(&env, &topics, 0), symbol_short!("soroscan"));
+    assert_eq!(topic_symbol(&env, &topics, 1), symbol_short!("transfer"));
 
-        // Retrieve all events
-        let all_events = env.events().all();
+    // Data is the intact 3-element tuple, encoded as a Vec.
+    let parts: Vec<Val> = data
+        .try_into_val(&env)
+        .expect("tuple data should decode to a vector");
+    assert_eq!(
+        parts.len(),
+        3,
+        "tuple payload should keep all three elements"
+    );
 
-        // Verify consistent XDR structure across all events
-        for event in all_events.iter() {
-            // Each event should have topics (at minimum 1, but typically 2+ for soroscan events)
-            assert!(!event.1.is_empty(), "Each event must have at least 1 topic");
-        }
-    }
+    let part_from: Address = parts.get(0).unwrap().try_into_val(&env).unwrap();
+    let part_to: Address = parts.get(1).unwrap().try_into_val(&env).unwrap();
+    let amount: u32 = parts.get(2).unwrap().try_into_val(&env).unwrap();
 
-    #[test]
-    fn test_event_record_immutability() {
-        let env = Env::default();
-        let (client, admin) = setup_contract(&env);
-        let indexer = Address::generate(&env);
-        let target_contract = Address::generate(&env);
+    assert_eq!(part_from, from);
+    assert_eq!(part_to, to);
+    assert_eq!(amount, 7);
+}
 
-        client.add_indexer(&admin, &indexer);
+#[test]
+fn test_emit_batch_summary_topics_and_data() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MacroHarness);
+    let client = MacroHarnessClient::new(&env, &contract_id);
 
-        let event_type = soroban_sdk::symbol_short!("swap");
-        let payload_hash = BytesN::from_array(&env, &[42u8; 32]);
+    let indexer = Address::generate(&env);
+    client.emit_batch(&indexer, &3u32, &10u32);
 
-        // Record event and get the event record
-        client.record_event(&indexer, &target_contract, &event_type, &payload_hash);
+    let events = env.events().all();
+    assert_eq!(events.len(), 1, "should emit exactly one batch event");
 
-        // Retrieve the stored event
-        let stored = client
-            .latest_by_type(&event_type)
-            .expect("Event should be stored");
+    let (_contract, topics, data) = events.get(0).unwrap();
 
-        // Verify immutability - stored event should match what we recorded
-        assert_eq!(stored.contract_id, target_contract);
-        assert_eq!(stored.event_type, event_type);
-        assert_eq!(stored.payload_hash, payload_hash);
-    }
+    // Batch layout: ("soroscan", "batch").
+    assert_eq!(topics.len(), 2, "batch event should have two topics");
+    assert_eq!(topic_symbol(&env, &topics, 0), symbol_short!("soroscan"));
+    assert_eq!(topic_symbol(&env, &topics, 1), symbol_short!("batch"));
 
-    #[test]
-    fn test_macro_symbol_formatting() {
-        // Test that symbols are properly formatted through the macro
-        let env = Env::default();
-        let (client, admin) = setup_contract(&env);
-        let indexer = Address::generate(&env);
+    // Data is the (indexer, count, total) tuple.
+    let parts: Vec<Val> = data
+        .try_into_val(&env)
+        .expect("batch data should decode to a vector");
+    assert_eq!(parts.len(), 3);
 
-        // Test various event type symbols
-        let event_symbols = vec![
-            soroban_sdk::symbol_short!("transfer"),
-            soroban_sdk::symbol_short!("swap"),
-            soroban_sdk::symbol_short!("mint"),
-            soroban_sdk::symbol_short!("burn"),
-        ];
+    let part_indexer: Address = parts.get(0).unwrap().try_into_val(&env).unwrap();
+    let count: u32 = parts.get(1).unwrap().try_into_val(&env).unwrap();
+    let total: u32 = parts.get(2).unwrap().try_into_val(&env).unwrap();
 
-        for symbol in event_symbols {
-            let target = Address::generate(&env);
-            let hash = BytesN::from_array(&env, &[0u8; 32]);
+    assert_eq!(part_indexer, indexer);
+    assert_eq!(count, 3);
+    assert_eq!(total, 10);
+}
 
-            // This should not panic - symbols should be properly formatted
-            client.add_indexer(&admin, &indexer);
-            client.record_event(&indexer, &target, &symbol, &hash);
-        }
+#[test]
+fn test_multiple_emits_accumulate_events() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MacroHarness);
+    let client = MacroHarnessClient::new(&env, &contract_id);
 
-        // Verify all events were recorded
-        assert_eq!(
-            client.total_events(),
-            4,
-            "All events should be recorded with various symbols"
-        );
-    }
+    client.emit_scalar(&symbol_short!("mint"));
+    client.emit_scalar(&symbol_short!("burn"));
 
-    #[test]
-    fn test_emit_soroscan_event_macro_with_tuple_payload() {
-        // Regression test for #1649: a payload containing commas (a tuple) used
-        // to be naively split, which expanded to malformed code. The macro must
-        // accept it as a single argument and publish exactly one event.
-        use soroscan_macros::emit_soroscan_event;
+    let events = env.events().all();
+    assert_eq!(events.len(), 2, "each emit should record its own event");
 
-        let env = Env::default();
-        let contract_id = env.register_contract(None, SoroScanCore);
+    let (_, first_topics, _) = events.get(0).unwrap();
+    let (_, second_topics, _) = events.get(1).unwrap();
+    assert_eq!(topic_symbol(&env, &first_topics, 1), symbol_short!("mint"));
+    assert_eq!(topic_symbol(&env, &second_topics, 1), symbol_short!("burn"));
+}
 
-        let sender: u32 = 1;
-        let receiver: u32 = 2;
-        let amount: i128 = 3;
+#[test]
+fn test_emit_soroscan_event_macro_with_tuple_payload_publishes_one_event() {
+    // Regression test for #1649: a payload containing commas (a tuple) used
+    // to be naively split, which expanded to malformed code. The macro must
+    // accept it as a single argument and publish exactly one event.
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MacroHarness);
 
-        env.as_contract(&contract_id, || {
-            emit_soroscan_event!(env, symbol_short!("swap"), (sender, receiver, amount));
-        });
+    let sender: u32 = 1;
+    let receiver: u32 = 2;
+    let amount: i128 = 3;
 
-        let events = env.events().all();
-        assert_eq!(
-            events.len(),
-            1,
-            "tuple payload should emit exactly one event"
-        );
-    }
+    env.as_contract(&contract_id, || {
+        emit_soroscan_event!(env, symbol_short!("swap"), (sender, receiver, amount));
+    });
 
-    #[test]
-    fn test_emit_soroscan_batch_macro_with_tuple_argument() {
-        // Regression test for #1649: the same comma-splitting bug affected
-        // emit_soroscan_batch!. An argument containing a comma (here a tuple)
-        // must be accepted intact.
-        use soroscan_macros::emit_soroscan_batch;
+    assert_eq!(
+        env.events().all().len(),
+        1,
+        "tuple payload should emit exactly one event"
+    );
+}
 
-        let env = Env::default();
-        let contract_id = env.register_contract(None, SoroScanCore);
-        let indexer = Address::generate(&env);
+#[test]
+fn test_emit_soroscan_batch_macro_with_tuple_argument_publishes_one_event() {
+    // Regression test for #1649: the same comma-splitting bug affected
+    // emit_soroscan_batch!. An argument containing a comma (here a tuple)
+    // must be accepted intact.
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MacroHarness);
+    let indexer = Address::generate(&env);
 
-        env.as_contract(&contract_id, || {
-            emit_soroscan_batch!(env, indexer, (5u32, 6u32), 42u32);
-        });
+    env.as_contract(&contract_id, || {
+        emit_soroscan_batch!(env, indexer, (5u32, 6u32), 42u32);
+    });
 
-        assert_eq!(env.events().all().len(), 1);
-    }
+    assert_eq!(env.events().all().len(), 1);
 }

@@ -1317,7 +1317,8 @@ class IndexerState(models.Model):
     """
 
     key = models.CharField(max_length=50, unique=True, primary_key=True)
-    value = models.CharField(max_length=200)
+    # TextField: reconciliation stores JSON blobs that exceed 200 chars.
+    value = models.TextField()
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

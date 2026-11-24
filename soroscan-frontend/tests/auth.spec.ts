@@ -27,6 +27,14 @@ test.describe("Authentication", () => {
   });
 
   test("should complete the login flow and redirect to dashboard", async ({ page }) => {
+    // CI runs the frontend without the Django backend, so stub the token endpoint.
+    await page.route("**/api/token/", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ access: "e2e-access-token", refresh: "e2e-refresh-token" }),
+      }),
+    );
     await page.goto("/login");
 
     await page.getByTestId("login-email").fill("operator@soroscan.io");

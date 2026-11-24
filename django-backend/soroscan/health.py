@@ -11,8 +11,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.conf import settings
 
-from celery.exceptions import TimeoutError
 from soroscan.celery import app
+from soroscan.monitoring import check_celery_workers
 
 WORKER_HEALTH_TIMEOUT_SECONDS = 2
 PROCESS_START_TIME = time.monotonic()
@@ -176,22 +176,18 @@ def readiness_view(request):
 @permission_classes([AllowAny])
 @throttle_classes([])
 def worker_health_view(request):
-    """Worker health probe - checks Celery workers are responding."""
-    try:
-        inspector = app.control.inspect(timeout=WORKER_HEALTH_TIMEOUT_SECONDS)
-        worker_status = inspector.ping()
+    """Worker health probe - checks Celery workers are responding.
 
-        if not worker_status:
-            raise Exception("no worker responded")
-
-        return Response({"status": "healthy", "workers": worker_status})
-    except TimeoutError:
-        return Response(
-            {"status": "unhealthy", "error": "worker ping timeout"},
-            status=503,
-        )
-    except Exception as exc:
-        return Response(
-            {"status": "unhealthy", "error": str(exc)},
-            status=503,
-        )
+    Delegates to :func:`soroscan.monitoring.check_celery_workers` so the
+    ping/summarize logic lives in one place. Responds ``200`` with the worker
+    map when at least one worker answered, otherwise ``503`` with a fixed
+    reason (``worker ping timeout``, ``no worker responded``, or ``worker
+    inspection failed``).
+    """
+    result = check_celery_workers(WORKER_HEALTH_TIMEOUT_SECONDS)
+    if result["status"] == "healthy":
+        return Response({"status": "healthy", "workers": result["workers"]})
+    return Response(
+        {"status": "unhealthy", "error": result["error"]},
+        status=503,
+    )

@@ -175,3 +175,164 @@ class TestWorkerHealthView:
         assert response.data["status"] == "unhealthy"
         assert "no worker responded" in response.data["error"]
         assert response["X-SoroScan-Version"] == settings.SOFTWARE_VERSION
+
+
+@pytest.mark.django_db
+class TestCheckCeleryWorkers:
+    """Unit tests for the shared worker-inspection helper (issue #1577)."""
+
+    def test_returns_healthy_with_workers_when_ping_succeeds(self, monkeypatch):
+        from soroscan.monitoring import check_celery_workers
+
+        class DummyInspect:
+            def ping(self):
+                return {"worker1@host": {"ok": "pong"}}
+
+        monkeypatch.setattr(
+            "soroscan.celery.app.control.inspect", lambda timeout=None: DummyInspect()
+        )
+
+        result = check_celery_workers(timeout=1)
+        assert result["status"] == "healthy"
+        assert result["workers"] == {"worker1@host": {"ok": "pong"}}
+        assert "error" not in result
+
+    def test_returns_unhealthy_when_no_worker(self, monkeypatch):
+        from soroscan.monitoring import check_celery_workers
+
+        class DummyInspect:
+            def ping(self):
+                return {}
+
+        monkeypatch.setattr(
+            "soroscan.celery.app.control.inspect", lambda timeout=None: DummyInspect()
+        )
+
+        result = check_celery_workers(timeout=1)
+        assert result["status"] == "unhealthy"
+        assert result["error"] == "no worker responded"
+        assert result["workers"] == {}
+
+    def test_timeout_maps_to_worker_ping_timeout(self, monkeypatch):
+        from celery.exceptions import TimeoutError as CeleryTimeoutError
+
+        from soroscan.monitoring import check_celery_workers
+
+        class DummyInspect:
+            def ping(self):
+                raise CeleryTimeoutError("deadline passed")
+
+        monkeypatch.setattr(
+            "soroscan.celery.app.control.inspect", lambda timeout=None: DummyInspect()
+        )
+
+        result = check_celery_workers(timeout=1)
+        assert result["status"] == "unhealthy"
+        assert result["error"] == "worker ping timeout"
+
+    def test_generic_exception_is_masked(self, monkeypatch):
+        from soroscan.monitoring import check_celery_workers
+
+        class DummyInspect:
+            def ping(self):
+                raise ConnectionError("amqp://user:secret@broker.internal:5672 refused")
+
+        monkeypatch.setattr(
+            "soroscan.celery.app.control.inspect", lambda timeout=None: DummyInspect()
+        )
+
+        result = check_celery_workers(timeout=1)
+        assert result["status"] == "unhealthy"
+        assert result["error"] == "worker inspection failed"
+        # Never leak broker coordinates to an unauthenticated probe.
+        assert "broker.internal" not in result["error"]
+        assert "secret" not in result["error"]
+
+
+@pytest.mark.django_db
+class TestWorkerHealthViewErrorPaths:
+    """Endpoint-level tests for the delegated worker probe (issue #1577)."""
+
+    def test_worker_health_masks_generic_exception(self, api_client, monkeypatch):
+        class DummyInspect:
+            def ping(self):
+                raise ConnectionError("amqp://user:secret@broker.internal:5672 refused")
+
+        monkeypatch.setattr(
+            "soroscan.health.app.control.inspect",
+            lambda timeout=None: DummyInspect(),
+        )
+
+        url = reverse("worker-health")
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert response.data["status"] == "unhealthy"
+        assert response.data["error"] == "worker inspection failed"
+        assert "broker.internal" not in response.data["error"]
+
+    def test_worker_health_timeout_returns_503(self, api_client, monkeypatch):
+        from celery.exceptions import TimeoutError as CeleryTimeoutError
+
+        class DummyInspect:
+            def ping(self):
+                raise CeleryTimeoutError("worker ping exceeded deadline")
+
+        monkeypatch.setattr(
+            "soroscan.health.app.control.inspect",
+            lambda timeout=None: DummyInspect(),
+        )
+
+        url = reverse("worker-health")
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert response.data["status"] == "unhealthy"
+        assert response.data["error"] == "worker ping timeout"
+
+    def test_worker_health_passes_configured_timeout(self, api_client, monkeypatch):
+        from soroscan.health import WORKER_HEALTH_TIMEOUT_SECONDS
+
+        seen = {}
+
+        class DummyInspect:
+            def ping(self):
+                return {"worker1@host": {"ok": "pong"}}
+
+        def fake_inspect(timeout=None):
+            seen["timeout"] = timeout
+            return DummyInspect()
+
+        monkeypatch.setattr("soroscan.health.app.control.inspect", fake_inspect)
+
+        url = reverse("worker-health")
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert seen["timeout"] == WORKER_HEALTH_TIMEOUT_SECONDS
+
+    def test_worker_health_responds_promptly(self, api_client, monkeypatch):
+        # The probe must answer within the inspection timeout, not hang on a
+        # dead broker. A slow ping would trip the endpoint's own budget.
+        import time as _time
+
+        class SlowInspect:
+            def ping(self):
+                _time.sleep(3)
+                return {}
+
+        monkeypatch.setattr(
+            "soroscan.health.app.control.inspect",
+            lambda timeout=None: SlowInspect(),
+        )
+
+        url = reverse("worker-health")
+        start = _time.perf_counter()
+        response = api_client.get(url)
+        elapsed = _time.perf_counter() - start
+
+        # DRF runs the view synchronously, so the sleep still happens here; the
+        # assertion documents that the endpoint does not add work beyond the
+        # single inspection call.
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert elapsed < 5

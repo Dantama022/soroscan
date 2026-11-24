@@ -1,11 +1,8 @@
 ---
-id: deployment/security
+id: security
 title: Pre-Deployment Security Checklist
 description: Verifiable checklist for production hardening before go-live.
 slug: /deployment/security
-
-title: Security Checklist
-description: Network policies, secrets, TLS, and hardening recommendations for production.
 sidebar_label: Security
 hide_title: false
 ---

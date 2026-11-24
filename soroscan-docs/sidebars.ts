@@ -21,6 +21,29 @@ const sidebars: SidebarsConfig = {
     'ROADMAP',
     {
       type: 'category',
+      label: 'Architecture',
+      items: [
+        'architecture/README',
+        'architecture/event_decoding',
+        'architecture/deduplication',
+        'architecture/backfilling',
+        'architecture/UI-DESIGN',
+        'architecture/adr',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Features',
+      items: [
+        'features/webhook-test-inspection',
+        'features/event-count-cache-warming',
+        'features/webhook-tester-dashboard',
+        'features/celery-task-queue-monitoring',
+        'features/graphql-n1-detection',
+      ],
+    },
+    {
+      type: 'category',
       label: 'SDKs',
       items: ['sdk-python', 'sdk-typescript', 'sdk/sdk-development-guide'],
     },

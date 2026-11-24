@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '**/*.md'
+      - '**/*.mdx'
 
 permissions:
   contents: read
@@ -19,4 +20,7 @@ jobs:
       - name: Run markdownlint-cli2
         uses: DavidAnson/markdownlint-cli2-action@v16
         with:
-          globs: '**/*.md'
+          globs: |
+            **/*.md
+            **/*.mdx
+          config: .markdownlint.json

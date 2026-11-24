@@ -71,6 +71,11 @@ We document major architectural choices in ADRs to keep track of context, decisi
 - [ADR-0003: Database Schema Rationale](docs/adrs/0003-database-schema-rationale.md)
 - [ADR-0004: Webhook Delivery System](docs/adrs/0004-webhook-delivery-system.md)
 - [ADR-0005: Multi-Tenancy Design](docs/adrs/0005-multi-tenancy-design.md)
+- [ADR-0006: Django Backend](docs/adrs/0006-django-backend.md)
+- [ADR-0007: Strawberry GraphQL](docs/adrs/0007-strawberry-graphql.md)
+- [ADR-0008: Redis as Shared Cache and Channel Layer](docs/adrs/0008-redis-cache-and-channels.md)
+
+Full index and the ADR template live in [`docs/adrs/README.md`](docs/adrs/README.md).
 
 ---
 
@@ -383,7 +388,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 - [CELERY.md](docs/cookbook/CELERY.md) — Celery worker queues, concurrency settings, and deployment examples
 - [Architecture Overview](docs/architecture/README.md) — end-to-end system design, data flows, component interaction, and deployment architecture
-- [Architecture Decision Records](docs/architecture/adr.md) — rationale for core technology and design choices
+- [Architecture Decision Records](docs/adrs/README.md) — rationale for core technology and design choices
 - [DATABASE_TUNING.md](docs/database/DATABASE_TUNING.md) — Recommended configuration settings for high-volume write workloads and indexing optimizations.
 
 ## Handsoff notes

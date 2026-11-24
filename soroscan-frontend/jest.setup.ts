@@ -13,3 +13,14 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: jest.fn(),
   })),
 });
+
+// jsdom does not expose TextEncoder/TextDecoder; some dependencies need them.
+import { TextEncoder, TextDecoder } from 'util'
+if (typeof globalThis.TextEncoder === 'undefined') {
+  Object.assign(globalThis, { TextEncoder, TextDecoder })
+}
+
+// jsdom does not implement scrollIntoView.
+if (typeof window !== 'undefined' && !window.HTMLElement.prototype.scrollIntoView) {
+  window.HTMLElement.prototype.scrollIntoView = jest.fn()
+}

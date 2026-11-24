@@ -1,4 +1,4 @@
-"""
+""""
 Custom throttle classes for SoroScan API rate limiting.
 
 Rate-limit response headers
@@ -16,6 +16,13 @@ specification (https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-hea
 backwards-compatibility) and *also* to ``request._throttle_headers``.
 ``SlowQueryMiddleware`` merges both dicts, with API-key headers winning on
 conflict so that callers with explicit key quotas always see their own limits.
+
+Security note (issue #1699)
+---------------------------
+API keys are accepted **only** via the ``Authorization: ApiKey <token>``
+header.  Query-string (``?api_key=...``) and request-body (``api_key=...``)
+keys are intentionally ignored: URLs are logged by proxies/servers and
+bodies may be persisted, so neither is a safe transport for credentials.
 """
 import logging
 import math
@@ -111,15 +118,41 @@ class APIKeyThrottle(BaseThrottle):
     Distinguishes between:
     - ``AuthenticationFailed`` (401): missing, invalid, or revoked API key
     - ``False`` with 429 headers: genuine rate-limit quota exhausted
+
+    Security (issue #1699): API keys are accepted **only** from the
+    ``Authorization`` header.  Query-string and request-body keys are
+    ignored — never trust credentials that end up in proxy/server logs or
+    persisted request bodies.
     """
 
     CACHE_PREFIX = "soroscan_api_key_quota"
 
+    # Scheme name expected in the Authorization header, e.g. "ApiKey abcd1234".
+    AUTH_SCHEME = "apikey"
+
     def get_ident(self, request):
+        """Return the API-key token from the Authorization header, or None.
+
+        Only ``Authorization: ApiKey <token>`` is honoured.  Query-string
+        (``?api_key=``) and request-body (``api_key=``) values are
+        deliberately **ignored** (issue #1699) because they leak into
+        access logs and persisted bodies.
+        """
         auth = request.META.get("HTTP_AUTHORIZATION", "")
-        if auth.lower().startswith("apikey "):
-            return auth[7:].strip()
-        return request.GET.get("api_key") or request.POST.get("api_key")
+        if not auth:
+            return None
+
+        # Split into scheme + credentials on the first whitespace.
+        parts = auth.split(None, 1)
+        if len(parts) != 2:
+            return None
+
+        scheme, token = parts
+        if scheme.lower() != self.AUTH_SCHEME:
+            return None
+
+        token = token.strip()
+        return token or None
 
     def _cache_key(self, api_key_id: int) -> str:
         # Bucket resets at the start of every calendar hour
@@ -143,10 +176,10 @@ class APIKeyThrottle(BaseThrottle):
                     key=key_str, is_active=True
                 )
             except APIKey.DoesNotExist:
-                # Invalid / revoked key → reject
+                # Invalid / revoked key → 401 (not a 429 throttle response)
                 self._set_headers(request, limit=0, remaining=0, reset=self._next_reset())
                 throttle_rejections_total.labels(reason="invalid_api_key").inc()
-                return False
+                raise AuthenticationFailed("Invalid or revoked API key")
 
         # Determine effective quota (contract-level override wins when lower)
         quota = api_key.quota_per_hour

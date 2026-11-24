@@ -452,7 +452,7 @@ class SlowQueryMiddlewareTests(TestCase):
         def get_response(req):
             # Inside the wrapper, doing an actual query
             with connection.cursor() as cursor:
-                cursor.execute("SELECT 1 FROM sqlite_master WHERE name = %s", ["test"])
+                cursor.execute("SELECT 1 WHERE 'slow_query_probe' = %s", ["test"])
             return {}
             
         mw = SlowQueryMiddleware(get_response)

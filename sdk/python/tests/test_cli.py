@@ -309,3 +309,60 @@ def test_cli_help_lists_core_commands() -> None:
     assert "events" in help_text
     assert "webhooks" in help_text
     assert "contracts" in help_text
+
+
+# Issue #1706: make existing read-only SDK methods available from the CLI.
+def test_new_read_only_subcommands_appear_in_help() -> None:
+    from soroscan.cli import build_parser
+
+    help_text = build_parser().format_help()
+    for name in ("indexer-check", "admin", "contract-status"):
+        assert name in help_text
+
+
+def test_indexer_check_json_true_and_false(base_url, httpx_mock: HTTPXMock, capsys) -> None:
+    address = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+    url = f"{base_url}/api/ingest/indexers/check/?indexer_address={address}"
+    for authorized in (True, False):
+        httpx_mock.add_response(url=url, json={"is_indexer": authorized})
+        assert main([
+            "--base-url", base_url, "indexer-check", address, "--output", "json"
+        ]) == 0
+        assert json.loads(capsys.readouterr().out) == {"is_indexer": authorized}
+
+
+def test_admin_table_and_json(base_url, httpx_mock: HTTPXMock, capsys) -> None:
+    address = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+    url = f"{base_url}/api/ingest/contract/admin/"
+    httpx_mock.add_response(url=url, json={"admin_address": address})
+    assert main(["--base-url", base_url, "admin"]) == 0
+    assert address in capsys.readouterr().out
+
+    httpx_mock.add_response(url=url, json={"admin_address": None})
+    assert main(["--base-url", base_url, "admin", "--output", "json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"admin_address": None}
+
+
+def test_contract_status_table_and_json(base_url, httpx_mock: HTTPXMock, capsys) -> None:
+    url = f"{base_url}/api/contract-status/"
+    status = {"paused": False, "admin": "GTESTADMIN", "total_events": 19}
+    httpx_mock.add_response(url=url, json=status)
+    assert main(["--base-url", base_url, "contract-status"]) == 0
+    output = capsys.readouterr().out
+    assert "total_events" in output and "19" in output
+
+    httpx_mock.add_response(url=url, json=status)
+    assert main(["--base-url", base_url, "contract-status", "--output", "json"]) == 0
+    assert json.loads(capsys.readouterr().out) == status
+
+
+def test_new_cli_subcommands_preserve_api_error_handling(
+    base_url, httpx_mock: HTTPXMock, capsys
+) -> None:
+    httpx_mock.add_response(
+        url=f"{base_url}/api/contract-status/",
+        json={"detail": "Service unavailable"},
+        status_code=503,
+    )
+    assert main(["--base-url", base_url, "contract-status"]) == 1
+    assert "Error" in capsys.readouterr().err

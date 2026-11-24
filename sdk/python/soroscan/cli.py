@@ -147,6 +147,30 @@ def _handle_indexers(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_indexer_check(args: argparse.Namespace) -> int:
+    """Report whether an address is an authorized indexer."""
+    with _build_client(args) as client:
+        result = client.is_indexer(args.indexer_address)
+    _emit(result, args.output, ["is_indexer"])
+    return 0
+
+
+def _handle_admin(args: argparse.Namespace) -> int:
+    """Display the current contract administrator."""
+    with _build_client(args) as client:
+        result = client.get_admin()
+    _emit(result, args.output, ["admin_address"])
+    return 0
+
+
+def _handle_contract_status(args: argparse.Namespace) -> int:
+    """Display the contract's pause status and event count."""
+    with _build_client(args) as client:
+        result = client.get_contract_status()
+    _emit(result, args.output, ["paused", "admin", "total_events"])
+    return 0
+
+
 def _handle_record_event(args: argparse.Namespace) -> int:
     """Submit a single event to the SoroScan contract (SC-10)."""
     with _build_client(args) as client:
@@ -275,6 +299,23 @@ def build_parser() -> argparse.ArgumentParser:
     indexers_add.add_argument("indexer_address", help="Stellar address of the indexer")
     _add_output_flag(indexers_add)
     indexers_add.set_defaults(func=_handle_indexers)
+
+    indexer_check = subcommands.add_parser(
+        "indexer-check", help="Check whether an address is an authorized indexer"
+    )
+    indexer_check.add_argument("indexer_address", help="Stellar indexer address")
+    _add_output_flag(indexer_check)
+    indexer_check.set_defaults(func=_handle_indexer_check)
+
+    admin = subcommands.add_parser("admin", help="Get the contract admin address")
+    _add_output_flag(admin)
+    admin.set_defaults(func=_handle_admin)
+
+    contract_status = subcommands.add_parser(
+        "contract-status", help="Get the contract pause status and event count"
+    )
+    _add_output_flag(contract_status)
+    contract_status.set_defaults(func=_handle_contract_status)
 
     record_event = subcommands.add_parser(
         "record-event",

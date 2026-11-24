@@ -65,9 +65,9 @@ def test_index_migration_is_a_single_leaf():
     leaf_nodes = loader.graph.leaf_nodes(app="ingest")
 
     assert len(leaf_nodes) == 1, f"Expected one ingest leaf node, got {leaf_nodes}"
-    assert leaf_nodes[0][1].startswith("0056_"), (
-        f"Expected the 0056_ index migration to be the leaf, got {leaf_nodes[0][1]}"
-    )
+    # Later migrations may extend the chain; the index migration must remain
+    # part of it.
+    assert ("ingest", "0056_contractevent_ledger_timestamp_index") in loader.graph.nodes
 
 
 @pytest.mark.django_db

@@ -111,11 +111,18 @@ class TestCreateUpcomingEventPartitions:
                 executed.append(sql)
                 return _FakeResult()
 
+            def fetchone(self):
+                return None
+
+            def fetchall(self):
+                return []
+
         # Restore the real cursor before Django's fixture teardown runs.
         with pytest.MonkeyPatch.context() as monkeypatch:
             monkeypatch.setattr(connection, "cursor", lambda: _RecordingCursor())
             result = create_upcoming_event_partitions()
 
+        executed = [sql for sql in executed if sql.startswith("CREATE TABLE")]
         assert len(executed) == 3
         for sql in executed:
             assert sql.startswith("CREATE TABLE IF NOT EXISTS ")

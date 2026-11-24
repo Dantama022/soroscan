@@ -96,6 +96,8 @@ urlpatterns = [
         webhook_signing_public_key_view,
         name="webhook-signing-public-key",
     ),
+    # Must precede the router include, whose events/<pk>/ route would shadow it.
+    path("events/restore-archive/", restore_archived_events, name="restore-archive"),
     path("", include(router.urls)),
     path("record/", record_event_view, name="record-event"),
     path("indexers/add/", add_indexer_view, name="add-indexer"),
@@ -103,8 +105,6 @@ urlpatterns = [
     path("contract/admin/", get_admin_view, name="get-admin"),
     path("record/structured/", record_structured_event_view, name="record-structured-event"),
     path("health/", health_check, name="health-check"),
-    path("events/type-statistics/", event_type_statistics_view, name="event-type-statistics"),
-    path("events/restore-archive/", restore_archived_events, name="restore-archive"),
     path("audit-trail/", audit_trail_view, name="audit-trail"),
     path("admin/ingest-errors/", admin_ingest_errors_view, name="admin-ingest-errors"),
     path(

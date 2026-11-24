@@ -58,30 +58,71 @@ def partition_contractevent(apps, schema_editor):
         )
 
 
+_UNPARTITION_SQL = """
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ingest_contractevent_old') THEN
+        DROP TABLE IF EXISTS ingest_contractevent CASCADE;
+        ALTER TABLE ingest_contractevent_old RENAME TO ingest_contractevent;
+    ELSE
+        -- Detach the id sequence so dropping the partitioned table keeps it.
+        ALTER SEQUENCE IF EXISTS ingest_contractevent_id_seq OWNED BY NONE;
+
+        CREATE TABLE ingest_contractevent_unpart (
+            LIKE ingest_contractevent INCLUDING DEFAULTS INCLUDING CONSTRAINTS
+        );
+        INSERT INTO ingest_contractevent_unpart SELECT * FROM ingest_contractevent;
+        DROP TABLE ingest_contractevent CASCADE;
+        ALTER TABLE ingest_contractevent_unpart RENAME TO ingest_contractevent;
+        ALTER SEQUENCE IF EXISTS ingest_contractevent_id_seq OWNED BY ingest_contractevent.id;
+        ALTER TABLE ingest_contractevent ALTER COLUMN id SET DEFAULT nextval('ingest_contractevent_id_seq');
+
+        -- LIKE does not copy keys or indexes: restore the pre-partitioning
+        -- schema (names match what earlier migrations expect to find).
+        -- Deduplicate first so the narrower unique key can be created.
+        DELETE FROM ingest_contractevent a USING ingest_contractevent b
+        WHERE a.contract_id = b.contract_id AND a.ledger = b.ledger
+          AND a.event_index = b.event_index AND a.id > b.id;
+
+        ALTER TABLE ingest_contractevent ADD CONSTRAINT ingest_contractevent_pkey PRIMARY KEY (id);
+        ALTER TABLE ingest_contractevent ADD CONSTRAINT unique_contract_ledger_event_index
+            UNIQUE (contract_id, ledger, event_index);
+        ALTER TABLE ingest_contractevent ADD CONSTRAINT ingest_contractevent_contract_id_eaf17dc4_fk_ingest_tr
+            FOREIGN KEY (contract_id) REFERENCES ingest_trackedcontract(id) DEFERRABLE INITIALLY DEFERRED;
+        ALTER TABLE ingest_contractevent ADD CONSTRAINT ingest_contractevent_invocation_id_eafb481d_fk_ingest_co
+            FOREIGN KEY (invocation_id) REFERENCES ingest_contractinvocation(id) DEFERRABLE INITIALLY DEFERRED;
+        CREATE INDEX ingest_cont_contrac_07c066_idx ON ingest_contractevent (contract_id, event_type, "timestamp");
+        CREATE INDEX ingest_cont_contrac_3666e0_idx ON ingest_contractevent (contract_id, "timestamp");
+        CREATE INDEX ingest_cont_contrac_c5f862_idx ON ingest_contractevent (contract_id, ledger, event_index);
+        CREATE INDEX ingest_cont_invocat_123230_idx ON ingest_contractevent (invocation_id);
+        CREATE INDEX ingest_cont_ledger_dde0a1_idx ON ingest_contractevent (ledger);
+        CREATE INDEX ingest_cont_signatu_39e92a_idx ON ingest_contractevent (signature_status);
+        CREATE INDEX ingest_cont_tx_hash_24128c_idx ON ingest_contractevent (tx_hash);
+        CREATE INDEX ingest_contractevent_contract_id_eaf17dc4 ON ingest_contractevent (contract_id);
+        CREATE INDEX ingest_contractevent_decoding_status_c0ec4743 ON ingest_contractevent (decoding_status);
+        CREATE INDEX ingest_contractevent_decoding_status_c0ec4743_like ON ingest_contractevent (decoding_status varchar_pattern_ops);
+        CREATE INDEX ingest_contractevent_event_type_6d979220 ON ingest_contractevent (event_type);
+        CREATE INDEX ingest_contractevent_event_type_6d979220_like ON ingest_contractevent (event_type varchar_pattern_ops);
+        CREATE INDEX ingest_contractevent_invocation_id_eafb481d ON ingest_contractevent (invocation_id);
+        CREATE INDEX ingest_contractevent_ledger_4d1fe2c5 ON ingest_contractevent (ledger);
+        CREATE INDEX ingest_contractevent_payload_hash_3e22777d ON ingest_contractevent (payload_hash);
+        CREATE INDEX ingest_contractevent_payload_hash_3e22777d_like ON ingest_contractevent (payload_hash varchar_pattern_ops);
+        CREATE INDEX ingest_contractevent_signature_status_c7eba2d8 ON ingest_contractevent (signature_status);
+        CREATE INDEX ingest_contractevent_signature_status_c7eba2d8_like ON ingest_contractevent (signature_status varchar_pattern_ops);
+        CREATE INDEX ingest_contractevent_timestamp_5145059d ON ingest_contractevent ("timestamp");
+        CREATE INDEX ingest_contractevent_validation_status_9b0b90b3 ON ingest_contractevent (validation_status);
+        CREATE INDEX ingest_contractevent_validation_status_9b0b90b3_like ON ingest_contractevent (validation_status varchar_pattern_ops);
+    END IF;
+END $$;
+"""
+
+
 def unpartition_contractevent(apps, schema_editor):
     if schema_editor.connection.vendor != "postgresql":
         return
 
     with schema_editor.connection.cursor() as cursor:
-        cursor.execute(
-            """
-            DO $$
-            BEGIN
-                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ingest_contractevent_old') THEN
-                    DROP TABLE IF EXISTS ingest_contractevent CASCADE;
-                    ALTER TABLE ingest_contractevent_old RENAME TO ingest_contractevent;
-                ELSE
-                    -- Recreate unpartitioned table and copy data back
-                    CREATE TABLE IF NOT EXISTS ingest_contractevent_unpart (
-                        LIKE ingest_contractevent INCLUDING DEFAULTS INCLUDING CONSTRAINTS
-                    );
-                    INSERT INTO ingest_contractevent_unpart SELECT * FROM ingest_contractevent;
-                    DROP TABLE ingest_contractevent CASCADE;
-                    ALTER TABLE ingest_contractevent_unpart RENAME TO ingest_contractevent;
-                END IF;
-            END $$;
-            """
-        )
+        cursor.execute(_UNPARTITION_SQL)
 
 
 class Migration(migrations.Migration):

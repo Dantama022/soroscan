@@ -28,7 +28,7 @@ class SlowQueryLoggingTests(TestCase):
         """Query exceeding threshold produces a log with SQL and duration_ms."""
         def get_response(req):
             with connection.cursor() as cursor:
-                cursor.execute("SELECT 1 FROM sqlite_master WHERE name = %s", ["target"])
+                cursor.execute("SELECT 1 WHERE 'slow_query_probe' = %s", ["target"])
             return HttpResponse("OK")
 
         mw = SlowQueryMiddleware(get_response)
@@ -40,7 +40,7 @@ class SlowQueryLoggingTests(TestCase):
         mock_logger.warning.assert_called()
         args, kwargs = mock_logger.warning.call_args
         extra = kwargs.get("extra", {})
-        self.assertIn("SELECT 1 FROM sqlite_master", extra.get("sql", ""))
+        self.assertIn("SELECT 1 WHERE 'slow_query_probe'", extra.get("sql", ""))
         self.assertIn("target", extra.get("params", ""))
         self.assertIsInstance(extra.get("duration_ms"), float)
 

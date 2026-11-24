@@ -284,7 +284,10 @@ class GraphQLRateLimitExtension(SchemaExtension):
             yield
             return
 
-        request = execution_context.context.get("request")
+        ctx = execution_context.context
+        # Context may be dict-like (Strawberry Django) or a plain object
+        # exposing ``.request`` (tests, custom views).
+        request = ctx.get("request") if hasattr(ctx, "get") else getattr(ctx, "request", None)
         if not request:
             yield
             return

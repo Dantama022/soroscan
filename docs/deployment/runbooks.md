@@ -53,6 +53,7 @@ Detailed alert → action playbooks (with automation hooks) live under
 | Webhook delivery failure burst | [webhook-delivery-failure-burst.md](./playbooks/webhook-delivery-failure-burst.md) |
 | Database connection pool exhausted | [database-connection-pool-exhausted.md](./playbooks/database-connection-pool-exhausted.md) |
 | RPC endpoint unavailable | [rpc-endpoint-unavailable.md](./playbooks/rpc-endpoint-unavailable.md) |
+| Disaster recovery and restore drill | [disaster-recovery-restore-drill.md](./playbooks/disaster-recovery-restore-drill.md) |
 
 Prometheus alerts reference these playbooks via `runbook_url`. Remediation rules
 in Django (`RemediationRule`) encode the automated half of each mapping and are

@@ -57,7 +57,8 @@ jobs:
           retention-days: 30
 
       - name: Upload coverage to Codecov
-        if: always() && secrets.CODECOV_TOKEN != ''
+        if: always()
+        continue-on-error: true
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

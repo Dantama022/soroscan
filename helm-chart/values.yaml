@@ -1,0 +1,209 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: soroscan/backend
+  tag: v1.0.0
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+replicaCount: 2
+
+serviceAccount:
+  create: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: http
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: soroscan.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+config:
+  DEBUG: "False"
+  ALLOWED_HOSTS: "*"
+  FRONTEND_BASE_URL: "https://app.soroscan.example.com"
+  LOG_FORMAT: "json"
+  WEB_CONCURRENCY: "4"
+  DB_CONNECTIONS_PER_WORKER: "4"
+  DB_POOL_MIN_SIZE: "2"
+  DB_POOL_HARD_LIMIT: "40"
+  DB_CONN_MAX_AGE: "300"
+  DB_CONNECT_TIMEOUT: "5"
+  SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
+  STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+  CORS_ALLOWED_ORIGINS: ""
+  CELERY_TIMEZONE: "UTC"
+  SENTRY_ENVIRONMENT: "production"
+  SENTRY_TRACES_SAMPLE_RATE: "0.1"
+
+env: {}
+
+secrets:
+  create: true
+  existingSecret: ""
+  data:
+    SECRET_KEY: "change-me"
+    DATABASE_URL: "postgresql://user:pass@postgres:5432/soroscan"
+    REDIS_URL: "redis://redis:6379/0"
+    SOROSCAN_CONTRACT_ID: ""
+    INDEXER_SECRET_KEY: ""
+
+probes:
+  readiness:
+    path: /api/events/
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  liveness:
+    path: /api/events/
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+celery:
+  workers:
+    high:
+      enabled: true
+      replicaCount: 1
+      concurrency: 8
+      queue: high_priority
+      maxTasksPerChild: 1000
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+        limits:
+          cpu: 2000m
+          memory: 2Gi
+    default:
+      enabled: true
+      replicaCount: 1
+      concurrency: 4
+      queue: default
+      maxTasksPerChild: 1000
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+    low:
+      enabled: true
+      replicaCount: 1
+      concurrency: 4
+      queue: low_priority
+      maxTasksPerChild: 1000
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+    backfill:
+      enabled: true
+      replicaCount: 1
+      concurrency: 2
+      queue: backfill
+      maxTasksPerChild: 100
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+  beat:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+backup:
+  enabled: false
+  schedule: "0 2 * * *"
+  image: soroscan/pg-backup:latest
+  pullPolicy: IfNotPresent
+  backoffLimit: 1
+  activeDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  config:
+    S3_BUCKET: "soroscan-backups"
+    S3_PREFIX: "pg-backups"
+    S3_WAL_PREFIX: "wal-archive"
+    AWS_DEFAULT_REGION: "us-east-1"
+    BACKUP_RETENTION_DAYS: "30"
+    RESTORE_JOBS: "4"
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    runAsUser: 999
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: ""
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}

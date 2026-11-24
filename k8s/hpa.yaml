@@ -1,0 +1,127 @@
+# HorizontalPodAutoscalers for the backend and Celery workers.
+# Requires metrics-server. Utilization targets are a percentage of each
+# container's CPU request (see backend-deployment.yaml / worker-deployment.yaml).
+# The deployments omit spec.replicas so re-applying them does not reset the
+# replica count chosen by the HPA; minReplicas sets the initial size.
+#
+# | Target                   | Min | Max | CPU target |
+# | ------------------------ | --- | --- | ---------- |
+# | soroscan-backend         | 2   | 10  | 70%        |
+# | soroscan-worker-high     | 1   | 8   | 75%        |
+# | soroscan-worker-default  | 1   | 6   | 75%        |
+# | soroscan-worker-low      | 1   | 4   | 75%        |
+# | soroscan-worker-backfill | 1   | 3   | 75%        |
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: soroscan-backend-hpa
+  namespace: soroscan
+  labels:
+    app: soroscan
+    component: backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: soroscan-backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: soroscan-worker-high-hpa
+  namespace: soroscan
+  labels:
+    app: soroscan
+    component: worker-high
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: soroscan-worker-high
+  minReplicas: 1
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: soroscan-worker-default-hpa
+  namespace: soroscan
+  labels:
+    app: soroscan
+    component: worker-default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: soroscan-worker-default
+  minReplicas: 1
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: soroscan-worker-low-hpa
+  namespace: soroscan
+  labels:
+    app: soroscan
+    component: worker-low
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: soroscan-worker-low
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: soroscan-worker-backfill-hpa
+  namespace: soroscan
+  labels:
+    app: soroscan
+    component: worker-backfill
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: soroscan-worker-backfill
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75

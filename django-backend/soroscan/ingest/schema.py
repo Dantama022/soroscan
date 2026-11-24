@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from datetime import datetime
 from enum import Enum
 from typing import AsyncGenerator, List, Optional
@@ -10,6 +11,7 @@ from typing import AsyncGenerator, List, Optional
 import strawberry
 import strawberry_django
 from channels.layers import get_channel_layer
+from django.db import IntegrityError, transaction
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.utils import timezone
 from strawberry import auto
@@ -48,6 +50,57 @@ from ..graphql_extensions import (
     field_permission_classes,
 )
 from ..graphql_n1_detector import N1QueryDetectorExtension
+
+# ---------------------------------------------------------------------------
+# Contract-ID validation (issue #1700)
+# ---------------------------------------------------------------------------
+# Soroban contract addresses are StrKey-encoded, 56 chars long, start with a
+# "C", and use the RFC 4648 Base32 alphabet (A-Z, 2-7).  We try ``StrKey``
+# from ``stellar-sdk`` first — it performs the full CRC16 checksum validation.
+# If the import fails for any reason (e.g. minimal deploy env), fall back to
+# a conservative regex so the mutation still rejects malformed IDs rather
+# than silently accepting them.
+_SOROBAN_CONTRACT_ID_RE = re.compile(r"^C[A-Z2-7]{55}$")
+
+try:  # pragma: no cover - import path depends on installed extras
+    from stellar_sdk import StrKey as _StellarStrKey  # type: ignore
+except Exception:  # pragma: no cover
+    _StellarStrKey = None
+
+
+def _validate_contract_id(contract_id: str) -> str:
+    """Normalise and validate a Soroban contract address.
+
+    Returns the normalised (stripped) contract ID on success.
+    Raises ``ValueError`` with a user-facing message on failure so the
+    Strawberry layer surfaces a clean GraphQL error (no 500 / no
+    ``IntegrityError`` leaks).
+    """
+    if not isinstance(contract_id, str):
+        raise ValueError("contractId must be a string")
+
+    normalised = contract_id.strip()
+    if not normalised:
+        raise ValueError("contractId must not be empty")
+
+    if _StellarStrKey is not None:
+        try:
+            ok = bool(_StellarStrKey.is_valid_contract(normalised))
+        except Exception:
+            ok = False
+        if not ok:
+            raise ValueError(
+                "Invalid contractId: expected a 56-character Soroban contract "
+                "address starting with 'C' (e.g. 'CABC...XYZ')."
+            )
+        return normalised
+
+    if not _SOROBAN_CONTRACT_ID_RE.match(normalised):
+        raise ValueError(
+            "Invalid contractId: expected a 56-character Soroban contract "
+            "address starting with 'C' (Base32 alphabet A-Z, 2-7)."
+        )
+    return normalised
 
 
 def _get_authenticated_user(info: Info):
@@ -1008,11 +1061,25 @@ class Mutation:
         team_id: Optional[int] = None,
         metadata: Optional[strawberry.scalars.JSON] = None,
     ) -> ContractType:
-        """Register a new contract for indexing."""
+        """Register a new contract for indexing.
+
+        Validates the client-supplied ``contract_id`` as a Soroban contract
+        address before hitting the DB, and converts unique-constraint
+        violations into a clean GraphQL error instead of an unhandled
+        ``IntegrityError`` (issue #1700).
+        """
         user = _get_authenticated_user(info)
         if not user:
             raise Exception("Authentication required")
 
+        # ---- 1. Validate the contract ID format --------------------------
+        try:
+            normalised_contract_id = _validate_contract_id(contract_id)
+        except ValueError as exc:
+            # Strawberry surfaces ``Exception`` messages verbatim to clients.
+            raise Exception(str(exc)) from exc
+
+        # ---- 2. Validate team membership (unchanged) ---------------------
         from .models import Team, TeamMembership
 
         team = None
@@ -1024,15 +1091,27 @@ class Mutation:
             if not TeamMembership.objects.filter(team=team, user=user).exists():
                 raise Exception("Not a member of this team")
 
-        contract = TrackedContract.objects.create(
-            contract_id=contract_id,
-            name=name,
-            description=description,
-            owner=user,
-            team=team,
-            metadata=metadata or {},
-        )
-        invalidate_cached_contract(contract_id)
+        # ---- 3. Create inside a savepoint so duplicate-detection is safe -
+        # Wrapping in ``transaction.atomic()`` keeps the DB connection usable
+        # even after the IntegrityError, which lets Strawberry serialise the
+        # GraphQL error correctly instead of tripping Django's
+        # "transaction is broken" guard.
+        try:
+            with transaction.atomic():
+                contract = TrackedContract.objects.create(
+                    contract_id=normalised_contract_id,
+                    name=name,
+                    description=description,
+                    owner=user,
+                    team=team,
+                    metadata=metadata or {},
+                )
+        except IntegrityError:
+            raise Exception(
+                f"A contract with ID '{normalised_contract_id}' is already registered."
+            )
+
+        invalidate_cached_contract(normalised_contract_id)
         return contract
 
     @strawberry.mutation

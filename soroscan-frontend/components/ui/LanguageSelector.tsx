@@ -4,6 +4,7 @@ import * as React from "react"
 import { useLocale, useTranslations } from "next-intl"
 import { usePathname, useRouter } from "next/navigation"
 import { locales, defaultLocale, type AppLocale } from "@/lib/locales"
+import { hardNavigate } from "@/lib/navigation"
 
 const LOCALE_TRANSLATION_KEY: Record<AppLocale, "english" | "spanish"> = {
   en: "english",
@@ -38,7 +39,7 @@ export function LanguageSelector() {
         onChange={(event) => {
           const nextLocale = event.target.value as AppLocale
           document.cookie = `NEXT_LOCALE=${nextLocale};path=/;max-age=31536000;SameSite=Lax`
-          window.location.href = localizePathname(pathname, nextLocale)
+          hardNavigate(localizePathname(pathname, nextLocale))
         }}
         className="bg-transparent border border-terminal-gray/30 rounded-sm text-xs uppercase tracking-widest text-terminal-gray hover:text-terminal-green hover:border-terminal-green/30 transition-colors px-2 py-1 focus:outline-none focus:ring-1 focus:ring-terminal-green/50 font-terminal-mono"
       >

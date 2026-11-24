@@ -573,22 +573,25 @@ class TestGraphQLQueries:
 @pytest.mark.django_db
 class TestGraphQLMutations:
     def test_register_contract(self, user):
-        mutation = """
-            mutation {
+        from stellar_sdk import StrKey
+
+        new_id = StrKey.encode_contract(bytes([7]) * 32)
+        mutation = f"""
+            mutation {{
                 registerContract(
-                    contractId: "CTEST123",
+                    contractId: "{new_id}",
                     name: "Test Contract",
                     description: "A test"
-                ) {
+                ) {{
                     contractId
                     name
-                }
-            }
+                }}
+            }}
         """
         context = create_context_with_user(user)
         result = schema.execute_sync(mutation, context_value=context)
         assert result.errors is None
-        assert result.data["registerContract"]["contractId"] == "CTEST123"
+        assert result.data["registerContract"]["contractId"] == new_id
 
     def test_update_contract(self, contract):
         mutation = f"""

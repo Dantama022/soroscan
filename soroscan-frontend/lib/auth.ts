@@ -104,7 +104,7 @@ export const authenticatedFetch = async (
   input: RequestInfo | URL,
   init: RequestInit = {}
 ): Promise<Response> => {
-  let token = getAccessToken();
+  const token = getAccessToken();
 
   const getHeaders = (authToken: string | null): HeadersInit => {
     const headers = new Headers(init.headers || {});

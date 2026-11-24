@@ -7,6 +7,12 @@ const mockLogin = jest.fn()
 const mockReplace = jest.fn()
 const mockRefresh = jest.fn()
 const mockSetTokens = jest.fn()
+const mockHardNavigate = jest.fn()
+const mockFetch = jest.fn()
+
+jest.mock("@/lib/navigation", () => ({
+  hardNavigate: (url: string) => mockHardNavigate(url),
+}))
 
 jest.mock("@apollo/client", () => ({
   gql: (strings: TemplateStringsArray) => strings.join(""),
@@ -38,6 +44,7 @@ function getFields() {
 describe("Admin Login page", () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    global.fetch = mockFetch as unknown as typeof fetch
   })
 
   afterEach(() => {
@@ -80,15 +87,11 @@ describe("Admin Login page", () => {
     expect(mockLogin).not.toHaveBeenCalled()
   })
 
-  it("calls the login mutation with the entered credentials and redirects on success", async () => {
-    mockLogin.mockResolvedValue({
-      data: {
-        login: {
-          access: "access-token",
-          refresh: "refresh-token",
-          user: { id: "1", email: "operator@soroscan.io" },
-        },
-      },
+  it("posts the entered credentials to the token endpoint and redirects on success", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ access: "access-token", refresh: "refresh-token" }),
     })
     const user = userEvent.setup()
     render(<LoginPage />)
@@ -98,9 +101,12 @@ describe("Admin Login page", () => {
     await user.type(password, "correct-horse")
     await user.click(submit)
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/admin"))
-    expect(mockLogin).toHaveBeenCalledWith({
-      variables: { email: "operator@soroscan.io", password: "correct-horse" },
+    await waitFor(() => expect(mockHardNavigate).toHaveBeenCalledWith("/admin"))
+    const [url, init] = mockFetch.mock.calls[0]
+    expect(String(url)).toMatch(/\/api\/token\/$/)
+    expect(JSON.parse(init.body)).toEqual({
+      username: "operator@soroscan.io",
+      password: "correct-horse",
     })
     expect(mockSetTokens).toHaveBeenCalledWith({
       access: "access-token",
@@ -109,9 +115,7 @@ describe("Admin Login page", () => {
   })
 
   it("displays an error message for invalid credentials", async () => {
-    // The dev auth fallback is disabled only in production builds.
-    env.NODE_ENV = "production"
-    mockLogin.mockRejectedValue(new Error("Invalid credentials"))
+    mockFetch.mockResolvedValue({ ok: false, status: 401, json: async () => ({}) })
     const user = userEvent.setup()
     render(<LoginPage />)
     const { email, password, submit } = getFields()
@@ -123,14 +127,13 @@ describe("Admin Login page", () => {
     expect(
       await screen.findByText("ERROR: INVALID_CREDENTIALS")
     ).toBeInTheDocument()
-    expect(mockLogin).toHaveBeenCalledTimes(1)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
     expect(mockSetTokens).not.toHaveBeenCalled()
-    expect(mockReplace).not.toHaveBeenCalled()
+    expect(mockHardNavigate).not.toHaveBeenCalled()
   })
 
-  it("displays AUTHENTICATION_FAILED when the mutation returns no login payload", async () => {
-    env.NODE_ENV = "production"
-    mockLogin.mockResolvedValue({ data: { login: null } })
+  it("displays AUTHENTICATION_FAILED when the token endpoint fails", async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) })
     const user = userEvent.setup()
     render(<LoginPage />)
     const { email, password, submit } = getFields()
@@ -142,6 +145,6 @@ describe("Admin Login page", () => {
     expect(
       await screen.findByText("ERROR: AUTHENTICATION_FAILED")
     ).toBeInTheDocument()
-    expect(mockReplace).not.toHaveBeenCalled()
+    expect(mockHardNavigate).not.toHaveBeenCalled()
   })
 })

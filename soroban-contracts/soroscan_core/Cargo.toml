@@ -16,6 +16,7 @@ soroscan_macros = { path = "../soroscan_macros" }
 
 [dev-dependencies]
 soroban-sdk = { version = "21.0.0", features = ["testutils"] }
+soroscan_macros = { path = "../soroscan_macros" }
 
 [profile.release]
 opt-level = "z"

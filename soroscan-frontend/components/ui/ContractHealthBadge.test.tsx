@@ -417,7 +417,11 @@ describe('ContractHealthBadge', () => {
 
     it('handles degradation context updates efficiently', () => {
       let renderCount = 0;
-      const TestWrapper = ({ context }: { context: any }) => {
+      const TestWrapper = ({
+        context,
+      }: {
+        context: React.ComponentProps<typeof ContractHealthBadge>["degradationContext"];
+      }) => {
         renderCount++;
         return (
           <ContractHealthBadge 
@@ -452,7 +456,9 @@ describe('ContractHealthBadge', () => {
       // Suppress console errors for this test
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       
-      render(<ContractHealthBadge status={'invalid' as any} />);
+      render(
+        <ContractHealthBadge status={"invalid" as unknown as ContractHealthStatus} />
+      );
       
       // Should still render without crashing
       expect(screen.getByRole('status')).toBeInTheDocument();
@@ -466,7 +472,9 @@ describe('ContractHealthBadge', () => {
       render(
         <ContractHealthBadge 
           status="degraded" 
-          degradationContext={{} as any}
+          degradationContext={
+            {} as React.ComponentProps<typeof ContractHealthBadge>["degradationContext"]
+          }
         />
       );
       

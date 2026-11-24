@@ -115,6 +115,14 @@ pnpm exec playwright test
 - Migration rollback: [migrations.md](migrations.md)
 - Shared helpers: `testing/reliability/`
 
+## Pact Contract Testing
+
+- Consumer-driven contracts keep the SDKs and the Django API in sync.
+- Consumer tests in `sdk/typescript` and `sdk/python` generate `pacts/*.json`;
+  the Django provider verifies them in CI.
+- See [pact-contract-testing.md](pact-contract-testing.md) for the full
+  consumer/provider guide, local and CI commands, and mismatch debugging.
+
 
 ## Cross-Team Notes
 

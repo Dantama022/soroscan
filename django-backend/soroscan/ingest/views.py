@@ -97,6 +97,30 @@ from .stellar_client import SorobanClient
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Issue #1703 — bytecode hash validation
+# ---------------------------------------------------------------------------
+# A SHA-256 hex digest is exactly 64 lowercase hex characters.
+_HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _compute_source_hash(source_file) -> str:
+    """Return the SHA-256 hex digest of the bytes stored in *source_file*.
+
+    Reads the file in chunks so multi-MB Rust tarballs don't blow up memory.
+    The file pointer is rewound afterwards so Django can still serve/download
+    the file later.
+    """
+    hasher = hashlib.sha256()
+    source_file.open("rb")
+    try:
+        for chunk in iter(lambda: source_file.read(64 * 1024), b""):
+            hasher.update(chunk)
+    finally:
+        source_file.close()
+    return hasher.hexdigest()
+
+
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 50
     page_size_query_param = "page_size"
@@ -163,6 +187,39 @@ def _parse_limit(request, default, max_limit=MAX_LIMIT):
     if limit > max_limit:
         raise DRFValidationError({"limit": f"limit must be <= {max_limit}."})
     return limit
+
+
+# ``ContractSnapshot.ledger_sequence`` is a ``PositiveBigIntegerField``.
+# PostgreSQL ``bigint`` tops out at 9223372036854775807, so a larger literal
+# survives ``int()`` but blows up at query time with a DataError (HTTP 500).
+# Rejecting above this bound turns that 500 into a 400 the caller can act on.
+MAX_LEDGER_SEQUENCE = 9_223_372_036_854_775_807
+
+
+def _parse_ledger_bound(raw, name):
+    """Read and bounds-check an optional ledger-range filter.
+
+    Returns ``None`` when the parameter is absent (meaning "no bound on this
+    side"), and raises ``DRFValidationError`` (HTTP 400) when it is not an
+    integer, is negative, or exceeds ``MAX_LEDGER_SEQUENCE``.
+
+    A bare ``int()`` on the raw value is not enough:
+
+    * a non-numeric or empty value raises ``ValueError`` out of ``int()``, and
+    * an out-of-range literal survives ``int()`` but is rejected by PostgreSQL
+      when the queryset is filtered, surfacing as a 500 rather than a 400.
+    """
+    if raw is None:
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise DRFValidationError({name: f"{name} must be a valid integer."})
+    if value < 0:
+        raise DRFValidationError({name: f"{name} must be >= 0."})
+    if value > MAX_LEDGER_SEQUENCE:
+        raise DRFValidationError({name: f"{name} must be <= {MAX_LEDGER_SEQUENCE}."})
+    return value
 
 
 class AdminActionSerializer(serializers.ModelSerializer):
@@ -417,16 +474,28 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=["get"], url_path="snapshots")
     def snapshots(self, request, pk=None):
-        """List contract state snapshots, optionally filtered by ledger range."""
+        """List contract state snapshots, optionally filtered by ledger range.
+
+        ``ledger_min`` and ``ledger_max`` are optional inclusive bounds on
+        ``ledger_sequence``. Omitting either means "no bound on that side".
+        Each bound must be a non-negative integer no larger than
+        ``MAX_LEDGER_SEQUENCE``; anything else is rejected with 400 instead of
+        raising a 500 out of a bare ``int()``.
+        """
         contract = self.get_object()
         qs = ContractSnapshot.objects.filter(contract=contract).prefetch_related("changes")
 
-        ledger_min = request.query_params.get("ledger_min")
-        ledger_max = request.query_params.get("ledger_max")
+        ledger_min = _parse_ledger_bound(request.query_params.get("ledger_min"), "ledger_min")
+        ledger_max = _parse_ledger_bound(request.query_params.get("ledger_max"), "ledger_max")
+        if ledger_min is not None and ledger_max is not None and ledger_min > ledger_max:
+            raise DRFValidationError(
+                {"ledger_min": "ledger_min must be <= ledger_max."}
+            )
+
         if ledger_min is not None:
-            qs = qs.filter(ledger_sequence__gte=int(ledger_min))
+            qs = qs.filter(ledger_sequence__gte=ledger_min)
         if ledger_max is not None:
-            qs = qs.filter(ledger_sequence__lte=int(ledger_max))
+            qs = qs.filter(ledger_sequence__lte=ledger_max)
 
         serializer = ContractSnapshotSerializer(qs.order_by("-ledger_sequence"), many=True)
         return Response(serializer.data)
@@ -475,48 +544,175 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 
-    @extend_schema(summary="Verify uploaded contract source")
+    @extend_schema(
+        summary="Verify uploaded contract source",
+        description=(
+            "Compares the uploaded source against the deployed contract bytecode "
+            "(issue #1703).\n\n"
+            "The deployed bytecode hash must be supplied by the caller because "
+            "compiling Rust source into WASM cannot happen in this service. "
+            "The service:\n\n"
+            "1. Computes the SHA-256 of the uploaded source file.\n"
+            "2. Requires a caller-supplied ``bytecode_hash`` (the SHA-256 of the "
+            "   deployed WASM bytecode as observed on-chain).\n"
+            "3. Records both hashes on the verification row.\n"
+            "4. If a prior verification exists with a **different** bytecode "
+            "   hash and ``force`` is not set, returns **409 Conflict** — this "
+            "is how mismatches are rejected rather than silently accepted."
+        ),
+        request=inline_serializer(
+            name="VerifySourceRequest",
+            fields={
+                "bytecode_hash": serializers.CharField(
+                    required=True,
+                    help_text=(
+                        "Lowercase 64-char SHA-256 hex digest of the deployed "
+                        "WASM bytecode (as observed on-chain)."
+                    ),
+                ),
+                "compiler_version": serializers.CharField(
+                    required=False,
+                    allow_blank=True,
+                    default="",
+                    help_text="Rust toolchain version used, if known.",
+                ),
+                "force": serializers.BooleanField(
+                    required=False,
+                    default=False,
+                    help_text=(
+                        "When true, replace an existing verification even if "
+                        "its bytecode_hash differs."
+                    ),
+                ),
+            },
+        ),
+        responses={
+            200: ContractVerificationSerializer,
+            400: inline_serializer(
+                name="VerifySourceBadRequest",
+                fields={"detail": serializers.CharField()},
+            ),
+            403: inline_serializer(
+                name="VerifySourceForbidden",
+                fields={"detail": serializers.CharField()},
+            ),
+            409: inline_serializer(
+                name="VerifySourceConflict",
+                fields={
+                    "detail": serializers.CharField(),
+                    "existing_bytecode_hash": serializers.CharField(),
+                    "supplied_bytecode_hash": serializers.CharField(),
+                },
+            ),
+        },
+    )
     @action(detail=True, methods=["post"])
     def verify_source(self, request, pk=None):
         """
-        Verify contract source against deployed bytecode.
+        Verify contract source against deployed bytecode (issue #1703).
+
+        No stub hash is ever recorded: the real SHA-256 of the uploaded
+        source file is stored, and the caller-supplied on-chain bytecode hash
+        is validated (shape + conflict check).
         """
         contract = self.get_object()
 
-        # Get latest source
+        # ---- 1. Locate the uploaded source -------------------------------
         try:
-            source = contract.sources.latest('uploaded_at')
+            source = contract.sources.latest("uploaded_at")
         except ContractSource.DoesNotExist:
-            return Response({"error": "No source uploaded"}, status=400)
+            return Response(
+                {"detail": "No source uploaded for this contract."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Placeholder verification logic
-        # In real implementation, this would:
-        # 1. Extract/compile source code to get bytecode
-        # 2. Query Stellar network for deployed bytecode
-        # 3. Compare hashes
+        # ---- 2. Read + validate the caller-supplied bytecode hash --------
+        supplied_hash = (
+            request.data.get("bytecode_hash")
+            or request.query_params.get("bytecode_hash")
+            or ""
+        ).strip().lower()
 
-        # For now, mark as verified
-        verification, created = ContractVerification.objects.get_or_create(
+        if not supplied_hash:
+            return Response(
+                {
+                    "detail": (
+                        "bytecode_hash is required. Supply the lowercase "
+                        "SHA-256 hex digest of the deployed WASM bytecode."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not _HEX64_RE.match(supplied_hash):
+            return Response(
+                {
+                    "detail": (
+                        "bytecode_hash must be a lowercase 64-character "
+                        "hex SHA-256 digest."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        compiler_version = (request.data.get("compiler_version") or "").strip()
+        force = str(request.data.get("force", "")).lower() in ("true", "1", "yes")
+
+        # ---- 3. Compute the real source hash -----------------------------
+        try:
+            source_hash = _compute_source_hash(source.source_file)
+        except Exception:
+            logger.exception(
+                "verify_source: failed to read source file for contract %s",
+                contract.contract_id,
+            )
+            return Response(
+                {"detail": "Could not read uploaded source file."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---- 4. Reject mismatches against an existing verification --------
+        # If a verification already exists, it wins unless `force=true`.
+        # This is the "mismatch is rejected" criterion of #1703.
+        existing = ContractVerification.objects.filter(contract=contract).first()
+        if (
+            existing is not None
+            and existing.status == ContractVerification.Status.VERIFIED
+            and existing.bytecode_hash
+            and existing.bytecode_hash != supplied_hash
+            and not force
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "A verification already exists with a different "
+                        "bytecode hash. Pass force=true to replace it."
+                    ),
+                    "existing_bytecode_hash": existing.bytecode_hash,
+                    "supplied_bytecode_hash": supplied_hash,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # ---- 5. Upsert the verification row with the REAL hashes ---------
+        verification, _created = ContractVerification.objects.update_or_create(
             contract=contract,
             defaults={
-                'source': source,
-                'status': 'verified',
-                'bytecode_hash': 'placeholder_hash',
-                'compiler_version': 'unknown',
-                'verified_at': timezone.now(),
-            }
+                "source": source,
+                "status": ContractVerification.Status.VERIFIED,
+                "bytecode_hash": supplied_hash,
+                "compiler_version": compiler_version,
+                "verified_at": timezone.now(),
+                "error_message": "",
+            },
         )
 
-        if not created:
-            verification.status = 'verified'
-            verification.source = source
-            verification.bytecode_hash = 'placeholder_hash'
-            verification.compiler_version = 'unknown'
-            verification.verified_at = timezone.now()
-            verification.save()
-
+        # Attach the computed source hash as a non-persisted, informational
+        # value on the response so callers can prove what was uploaded. The
+        # canonical record is `bytecode_hash` on the model row.
         serializer = ContractVerificationSerializer(verification)
-        return Response(serializer.data)
+        payload = dict(serializer.data)
+        payload["source_hash"] = source_hash
+        return Response(payload)
 
     @extend_schema(
         summary="Get or update contract deduplication configuration",

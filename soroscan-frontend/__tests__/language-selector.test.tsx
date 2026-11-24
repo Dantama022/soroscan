@@ -2,6 +2,11 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { LanguageSelector } from "@/components/ui/LanguageSelector";
 
+const mockHardNavigate = jest.fn();
+jest.mock("@/lib/navigation", () => ({
+  hardNavigate: (url: string) => mockHardNavigate(url),
+}));
+
 const pushMock = jest.fn();
 let mockPathname = "/";
 
@@ -13,16 +18,9 @@ jest.mock("next/navigation", () => ({
 }));
 
 describe("LanguageSelector", () => {
-  const originalLocation = window.location;
-
   beforeEach(() => {
-    delete (window as any).location;
-    window.location = { href: "" } as any;
+    mockHardNavigate.mockClear();
     mockPathname = "/";
-  });
-
-  afterEach(() => {
-    window.location = originalLocation;
   });
 
   it("renders a select with both supported locales", () => {
@@ -44,7 +42,7 @@ describe("LanguageSelector", () => {
     render(<LanguageSelector />);
     const select = screen.getByLabelText(/switch language/i);
     fireEvent.change(select, { target: { value: "es" } });
-    expect((window.location as any).href).toBe("/es/contracts");
+    expect(mockHardNavigate).toHaveBeenCalledWith("/es/contracts");
   });
 
   it("strips the locale prefix when switching back to the default locale", () => {
@@ -52,7 +50,7 @@ describe("LanguageSelector", () => {
     render(<LanguageSelector />);
     const select = screen.getByLabelText(/switch language/i);
     fireEvent.change(select, { target: { value: "en" } });
-    expect((window.location as any).href).toBe("/contracts");
+    expect(mockHardNavigate).toHaveBeenCalledWith("/contracts");
   });
 
   it("navigates to the bare /es root when on the default-locale homepage", () => {
@@ -60,6 +58,6 @@ describe("LanguageSelector", () => {
     render(<LanguageSelector />);
     const select = screen.getByLabelText(/switch language/i);
     fireEvent.change(select, { target: { value: "es" } });
-    expect((window.location as any).href).toBe("/es");
+    expect(mockHardNavigate).toHaveBeenCalledWith("/es");
   });
 });

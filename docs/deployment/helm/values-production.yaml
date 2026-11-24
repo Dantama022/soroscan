@@ -1,8 +1,10 @@
 replicaCount: 3
+
 image:
   repository: your-registry/soroscan-backend
   tag: v1.0.0
   pullPolicy: IfNotPresent
+
 resources:
   requests:
     cpu: 500m
@@ -10,29 +12,139 @@ resources:
   limits:
     cpu: 1000m
     memory: 2048Mi
+
 service:
   type: ClusterIP
+  port: 80
+
 ingress:
   enabled: true
+  className: alb
   annotations:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
   hosts:
     - host: api.example.com
       paths:
-        - /
-env:
-  DATABASE_URL: "postgres://user:pass@postgres.svc.cluster.local:5432/soroscan"
-  REDIS_URL: "redis://redis.svc.cluster.local:6379/0"
+        - path: /
+          pathType: Prefix
+  tls: []
+
+config:
+  DEBUG: "False"
+  ALLOWED_HOSTS: "api.example.com"
+  FRONTEND_BASE_URL: "https://app.example.com"
+  LOG_FORMAT: "json"
+  WEB_CONCURRENCY: "4"
+  DB_CONNECTIONS_PER_WORKER: "4"
+  DB_POOL_MIN_SIZE: "2"
+  DB_POOL_HARD_LIMIT: "40"
+  DB_CONN_MAX_AGE: "300"
+  DB_CONNECT_TIMEOUT: "5"
+  SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
+  STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+  CORS_ALLOWED_ORIGINS: "https://app.example.com"
+  CELERY_TIMEZONE: "UTC"
+  SENTRY_ENVIRONMENT: "production"
+  SENTRY_TRACES_SAMPLE_RATE: "0.1"
+
 secrets:
-  django_secret_key: "REPLACE_ME"
+  create: true
+  data:
+    SECRET_KEY: "REPLACE_ME"
+    DATABASE_URL: "postgresql://user:pass@postgres.svc.cluster.local:5432/soroscan"
+    REDIS_URL: "redis://redis.svc.cluster.local:6379/0"
+    SOROSCAN_CONTRACT_ID: "REPLACE_ME"
+    INDEXER_SECRET_KEY: "REPLACE_ME"
+
 celery:
-  worker:
-    replicaCount: 3
+  workers:
+    high:
+      enabled: true
+      replicaCount: 3
+      concurrency: 8
+      queue: high_priority
+      maxTasksPerChild: 1000
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+        limits:
+          cpu: 2000m
+          memory: 2Gi
+    default:
+      enabled: true
+      replicaCount: 2
+      concurrency: 4
+      queue: default
+      maxTasksPerChild: 1000
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+    low:
+      enabled: true
+      replicaCount: 1
+      concurrency: 4
+      queue: low_priority
+      maxTasksPerChild: 1000
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+    backfill:
+      enabled: true
+      replicaCount: 1
+      concurrency: 2
+      queue: backfill
+      maxTasksPerChild: 100
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+  beat:
+    enabled: true
     resources:
       requests:
-        cpu: 300m
-        memory: 512Mi
+        cpu: 100m
+        memory: 256Mi
       limits:
         cpu: 500m
-        memory: 1024Mi
+        memory: 512Mi
+
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  image: your-registry/soroscan-pg-backup:latest
+  config:
+    S3_BUCKET: "soroscan-backups"
+    S3_PREFIX: "pg-backups"
+    S3_WAL_PREFIX: "wal-archive"
+    AWS_DEFAULT_REGION: "us-east-1"
+    BACKUP_RETENTION_DAYS: "30"
+    RESTORE_JOBS: "4"
+
+autoscaling:
+  enabled: false
+  minReplicas: 3
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack

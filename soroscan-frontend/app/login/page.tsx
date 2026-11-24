@@ -3,6 +3,7 @@
 import React, { Suspense, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { setTokens } from '@/lib/auth';
+import { hardNavigate } from '@/lib/navigation';
 import { Button } from '@/components/terminal/Button';
 import {
   ValidatedInput,
@@ -27,7 +28,7 @@ function LoginPageInner() {
   const completeLogin = (access: string, refresh: string) => {
     setTokens({ access, refresh });
     if (typeof window !== 'undefined') {
-      window.location.href = callbackUrl;
+      hardNavigate(callbackUrl);
     } else {
       router.replace(callbackUrl);
     }

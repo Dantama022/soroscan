@@ -1,0 +1,58 @@
+{{- if .Values.backup.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "soroscan.fullname" . }}-backup-config
+  labels:
+    {{- include "soroscan.labels" . | nindent 4 }}
+    component: pg-backup
+data:
+  {{- range $key, $value := .Values.backup.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "soroscan.fullname" . }}-pg-backup
+  labels:
+    {{- include "soroscan.labels" . | nindent 4 }}
+    component: pg-backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.backup.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.backup.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "soroscan.labels" . | nindent 12 }}
+            component: pg-backup
+        spec:
+          restartPolicy: OnFailure
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "soroscan.serviceAccountName" . }}
+          containers:
+            - name: pg-backup
+              image: {{ .Values.backup.image }}
+              imagePullPolicy: {{ .Values.backup.pullPolicy }}
+              command: ["/scripts/pg_backup.sh"]
+              envFrom:
+                - secretRef:
+                    name: {{ include "soroscan.secretName" . }}
+                - configMapRef:
+                    name: {{ include "soroscan.fullname" . }}-backup-config
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              securityContext:
+                {{- toYaml .Values.backup.securityContext | nindent 16 }}
+          securityContext:
+            fsGroup: 999
+{{- end }}

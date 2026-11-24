@@ -260,6 +260,10 @@ Feature priorities and issue status change over time; see the [project roadmap](
 - Frontend: 2 Jest test modules.
 - These are checked-in inventory counts, not a collected or passing test total. Parametrization and runner configuration affect the number of executed cases.
 
+**GitHub Actions Workflows:**
+1. `django.yml` — Runs pytest, coverage analysis, linting (consolidates the former `django-tests.yml`; see issue #1678)
+2. `frontend-ci.yml` — Runs Jest, ESLint, Next.js build
+3. `migration-check.yml` — Validates migration integrity
 ### Coverage and CI
 
 - Backend CI runs pytest with coverage and enforces an 80% minimum; see [Django Tests](../.github/workflows/django-tests.yml).

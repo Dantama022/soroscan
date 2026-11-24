@@ -128,3 +128,6 @@ media/
 
 # Redis
 dump.rdb
+
+# Files uploaded during tests
+contract_sources/

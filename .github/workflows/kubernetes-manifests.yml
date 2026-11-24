@@ -1,9 +1,16 @@
 name: Kubernetes Manifest Validation
 
 on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'k8s/**'
+      - 'tests/**'
+      - '.github/workflows/kubernetes-manifests.yml'
   pull_request:
     paths:
       - 'k8s/**'
+      - 'tests/**'
       - '.github/workflows/kubernetes-manifests.yml'
 
 permissions:
@@ -27,3 +34,14 @@ jobs:
 
       - name: Validate manifests
         run: kubeconform -strict -summary -ignore-missing-schemas k8s/*.yaml
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: python -m pip install pytest PyYAML
+
+      - name: Run manifest invariant tests
+        run: python -m pytest tests/test_k8s_manifests.py -v

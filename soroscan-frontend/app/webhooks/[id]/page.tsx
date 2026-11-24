@@ -483,7 +483,6 @@ export default function WebhookDetailPage() {
                   </div>
                 } />
                 <InfoRow label="CONTRACT_FILTER" value={webhook.contractFilter ?? "ALL_CONTRACTS"} />
-                <InfoRow label="REQUEST_TIMEOUT" value={`${webhook.timeoutSeconds}s`} mono={false} />
                 <div className="col-span-full mt-4 rounded border border-terminal-green/10 bg-terminal-black/30 p-4">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>

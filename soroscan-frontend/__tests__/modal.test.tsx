@@ -19,7 +19,10 @@ if (typeof window.PointerEvent === "undefined") {
       this.pointerType = params.pointerType ?? "mouse";
     }
   }
-  (window as any).PointerEvent = MockPointerEvent;
+  Object.defineProperty(window, "PointerEvent", {
+    configurable: true,
+    value: MockPointerEvent,
+  });
 }
 if (typeof window.HTMLElement.prototype.hasPointerCapture === "undefined") {
   window.HTMLElement.prototype.hasPointerCapture = () => false;

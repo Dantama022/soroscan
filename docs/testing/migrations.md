@@ -57,7 +57,7 @@ seeded across the boundary, extend `_seed_historical_data`.
 
 ## CI
 
-`django-tests.yml` job `migration-rollbacks` runs `pytest -m migration` against
+`django.yml` job `migration-rollbacks` runs `pytest -m migration` against
 Postgres 16/15 and Redis. The main Django job still runs the full suite so
 coverage is not weakened.
 

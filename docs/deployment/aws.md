@@ -51,7 +51,7 @@ resource "aws_db_instance" "postgres" {
 
 ## Helm deploy (recommended)
 - Create a `values-production.yaml` that sets `replicaCount` for backend and worker, resource requests/limits, and PostgreSQL connection via `DATABASE_URL` secret.
-- Use `helm upgrade --install soroscan ./helm-chart -f values-production.yaml`
+- Use `helm upgrade --install soroscan ./helm-chart --namespace soroscan --create-namespace -f docs/deployment/helm/values-production.yaml`
 
 ## Networking and TLS
 - Use AWS ACM to issue TLS certs and ALB Ingress Controller (AWS Load Balancer Controller) to provision ALBs automatically.

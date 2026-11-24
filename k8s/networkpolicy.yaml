@@ -1,0 +1,176 @@
+# k8s/networkpolicy.yaml
+#
+# Network segmentation for the SoroScan namespace (issue #1681).
+#
+# Before this manifest, no NetworkPolicy resources existed in k8s/, so all
+# pod-to-pod traffic in the namespace was allowed by default. This file adds a
+# namespace-wide default-deny baseline plus explicit allow rules for the
+# required flows:
+#
+#   Ingress (pod-to-pod into the namespace):
+#     - ingress controller (nginx)  -> backend   (HTTP, :8000)
+#     - Prometheus (monitoring ns)  -> backend   (/metrics scrape, :8000)
+#     - kubelet                     -> backend   (health probes, :8000)
+#
+#   Egress (from backend / workers / beat / pg-backup):
+#     - -> kube-dns (kube-system)    DNS         (:53)
+#     - -> PostgreSQL (managed)      :5432
+#     - -> Redis (managed)           :6379
+#     - -> external HTTPS             :443  (Soroban RPC, webhook delivery, Sentry)
+#     - -> external HTTP              :80   (webhook subscribers that use plain HTTP)
+#
+# Environment assumptions (adjust the selectors below if your cluster differs):
+#   - Namespace:                soroscan (see k8s/namespace.yaml)
+#   - Ingress controller ns:    ingress-nginx
+#   - Prometheus ns:             monitoring
+#   - PostgreSQL & Redis:        external managed services, referenced via
+#                                DATABASE_URL / REDIS_URL in the soroscan-secrets
+#                                Secret (see k8s/secret-reference.yaml). Because
+#                                their IPs are environment-specific, egress to
+#                                them is allowed by port to any destination; in
+#                                production, narrow the ipBlock CIDRs to your
+#                                managed-service ranges.
+#
+# Apply with:
+#   kubectl apply -f k8s/networkpolicy.yaml
+#
+# Inspect with:
+#   kubectl -n soroscan get networkpolicy
+
+---
+# Default-deny all ingress AND egress for every pod in the soroscan namespace.
+# The allow-rules policies below layer explicit permits on top of this baseline.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: soroscan-default-deny
+  namespace: soroscan
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Allow the backend pods to receive traffic from the ingress controller,
+# Prometheus, and the kubelet (health probes). Workers, beat, and the backup
+# cronjob do not serve traffic, so they remain ingress-isolated by the
+# default-deny policy above.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: soroscan-allow-backend-ingress
+  namespace: soroscan
+spec:
+  podSelector:
+    matchLabels:
+      app: soroscan
+      component: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    # Ingress controller (nginx) -> backend on the HTTP port exposed by the
+    # soroscan-backend Service (targetPort http -> containerPort 8000).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+
+    # Prometheus -> backend for the /metrics scrape (see k8s/servicemonitor.yaml).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8000
+
+    # Kubelet health probes (readiness/liveness on /api/events/, see
+    # k8s/backend-deployment.yaml). Probes originate from the node rather than
+    # a pod; allowing kube-system is a portable default. For tighter security,
+    # replace this rule with an ipBlock scoped to your node/VPC subnet, e.g.:
+    #   - from:
+    #       - ipBlock:
+    #           cidr: 10.0.0.0/16   # <- your node subnet
+    #     ports:
+    #       - protocol: TCP
+    #         port: 8000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: TCP
+          port: 8000
+
+---
+# Allow all SoroScan application pods (backend, workers, beat, pg-backup — they
+# all carry `app: soroscan`) to reach the datastores and external services they
+# depend on. Without this, the default-deny egress above would block them.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: soroscan-allow-app-egress
+  namespace: soroscan
+spec:
+  podSelector:
+    matchLabels:
+      app: soroscan
+  policyTypes:
+    - Egress
+  egress:
+    # DNS resolution via kube-dns / CoreDNS in the kube-system namespace.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # PostgreSQL — external managed service (e.g. RDS). Tighten the CIDR to
+    # your managed-service range in production.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32   # cloud metadata endpoint
+      ports:
+        - protocol: TCP
+          port: 5432
+
+    # Redis — external managed service (e.g. ElastiCache). Tighten the CIDR to
+    # your managed-service range in production.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32   # cloud metadata endpoint
+      ports:
+        - protocol: TCP
+          port: 6379
+
+    # HTTPS to external services: Soroban RPC, webhook delivery, Sentry, S3.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32   # cloud metadata endpoint
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # HTTP to external services: some webhook subscribers use plain HTTP.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32   # cloud metadata endpoint
+      ports:
+        - protocol: TCP
+          port: 80

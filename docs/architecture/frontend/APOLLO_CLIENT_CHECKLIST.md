@@ -38,7 +38,7 @@ pnpm run build
 ```
 **Status**: PASSING (production build successful)
 
-### Backend CI (`.github/workflows/django-tests.yml`)
+### Backend CI (`.github/workflows/django.yml`)
 
 #### ✅ No Breaking Changes
 - Only added `CORS_ALLOW_CREDENTIALS = True` to settings
@@ -56,7 +56,7 @@ pnpm run build
 6. ✅ `soroscan-frontend/.env.local.example` - Environment template
 7. ✅ `soroscan-frontend/lib/apollo-client.README.md` - Technical docs
 8. ✅ `soroscan-frontend/APOLLO_INTEGRATION.md` - Integration guide
-9. ✅ `APOLLO_CLIENT_IMPLEMENTATION.md` - Implementation summary
+9. ✅ `docs/archive/implementation-summaries/APOLLO_CLIENT_IMPLEMENTATION.md` - Archived summary
 
 ### Modified Files (4)
 1. ✅ `soroscan-frontend/package.json` - Added @apollo/client dependency

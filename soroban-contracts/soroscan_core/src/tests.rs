@@ -489,10 +489,7 @@ fn latest_tagged_by_type_returns_none_when_missing() {
     let (contract_id, _, _) = setup(&env);
     let client = SoroScanCoreClient::new(&env, &contract_id);
 
-    assert_eq!(
-        client.latest_tagged_by_type(&symbol_short!("trade")),
-        None
-    );
+    assert_eq!(client.latest_tagged_by_type(&symbol_short!("trade")), None);
 }
 
 #[test]

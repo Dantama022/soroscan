@@ -79,6 +79,8 @@ export function useWebSocket(contractId: string) {
   }, [connect])
 
   useEffect(() => {
+    // Connection setup legitimately initializes status state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     connect()
     return () => {
       if (ws.current) {

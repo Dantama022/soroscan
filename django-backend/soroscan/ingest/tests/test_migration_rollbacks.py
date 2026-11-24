@@ -38,7 +38,18 @@ def _migration_dependencies(executor: MigrationExecutor, node):
             targets.extend(executor.loader.graph.leaf_nodes(app=app_label))
         else:
             targets.append((app_label, migration_name))
-    return targets
+    # Drop targets that are ancestors of another target (e.g. a migration that
+    # depends on both a merge migration and one of the merge's parents);
+    # migrating to both would otherwise produce a mixed forwards/backwards plan.
+    graph = executor.loader.graph
+    return [
+        target
+        for target in targets
+        if not any(
+            other != target and target in graph.forwards_plan(other)
+            for other in targets
+        )
+    ]
 
 
 def _expected_schema(state):

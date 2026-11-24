@@ -1,7 +1,8 @@
 """Regression coverage for #1698 WebSocket parsing and #1704 throttle counters."""
 import asyncio
+from rest_framework.exceptions import AuthenticationFailed
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from django.test import SimpleTestCase
 from prometheus_client import REGISTRY
@@ -70,10 +71,10 @@ class APIKeyThrottleMetricTests(SimpleTestCase):
         quota_before = metric_value("quota_exhausted")
         with patch.object(APIKey.objects, "select_related") as related:
             related.return_value.get.side_effect = APIKey.DoesNotExist
-            allowed = APIKeyThrottle().allow_request(
-                self.request(), SimpleNamespace(kwargs={})
-            )
-        self.assertFalse(allowed)
+            with self.assertRaises(AuthenticationFailed):
+                APIKeyThrottle().allow_request(
+                    self.request(), SimpleNamespace(kwargs={})
+                )
         self.assertEqual(metric_value("invalid_api_key"), before + 1)
         self.assertEqual(metric_value("quota_exhausted"), quota_before)
 

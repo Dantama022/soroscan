@@ -691,7 +691,7 @@ class APIKeySerializer(serializers.ModelSerializer):
             "last_used_at",
             "created_at",
         ]
-        read_only_fields = ["id", "key", "quota_per_hour", "last_used_at", "created_at"]
+        read_only_fields = ["id", "key", "is_active", "quota_per_hour", "last_used_at", "created_at"]
         extra_kwargs = {
             "key": {"read_only": True},
         }

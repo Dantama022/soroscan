@@ -1,0 +1,70 @@
+{{- range $name, $worker := .Values.celery.workers }}
+{{- if $worker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "soroscan.fullname" $ }}-worker-{{ $name }}
+  labels:
+    {{- include "soroscan.labels" $ | nindent 4 }}
+    component: worker-{{ $name }}
+spec:
+  replicas: {{ $worker.replicaCount | default 1 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "soroscan.selectorLabels" $ | nindent 6 }}
+      component: worker-{{ $name }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
+        {{- with $.Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "soroscan.labels" $ | nindent 8 }}
+        component: worker-{{ $name }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "soroscan.serviceAccountName" $ }}
+      {{- with $.Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: {{ include "soroscan.image" $ }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - soroscan
+            - worker
+            - --loglevel=info
+            - --concurrency={{ $worker.concurrency | default 4 }}
+            - --queues={{ $worker.queue }}
+            {{- if hasKey $worker "maxTasksPerChild" }}
+            - --max-tasks-per-child={{ $worker.maxTasksPerChild }}
+            {{- end }}
+            - --stop-timeout=30
+          workingDir: /app
+          envFrom:
+            - configMapRef:
+                name: {{ include "soroscan.configMapName" $ }}
+            - secretRef:
+                name: {{ include "soroscan.secretName" $ }}
+          resources:
+            {{- toYaml $worker.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+{{- end }}
+{{- end }}

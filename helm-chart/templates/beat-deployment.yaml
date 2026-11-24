@@ -1,0 +1,65 @@
+{{- if .Values.celery.beat.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "soroscan.fullname" . }}-beat
+  labels:
+    {{- include "soroscan.labels" . | nindent 4 }}
+    component: beat
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "soroscan.selectorLabels" . | nindent 6 }}
+      component: beat
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "soroscan.labels" . | nindent 8 }}
+        component: beat
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "soroscan.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: beat
+          image: {{ include "soroscan.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - soroscan
+            - beat
+            - --loglevel=info
+            - --pidfile=/tmp/celerybeat.pid
+          workingDir: /app
+          envFrom:
+            - configMapRef:
+                name: {{ include "soroscan.configMapName" . }}
+            - secretRef:
+                name: {{ include "soroscan.secretName" . }}
+          resources:
+            {{- toYaml .Values.celery.beat.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: beat-schedule
+              mountPath: /tmp
+      volumes:
+        - name: beat-schedule
+          emptyDir: {}
+{{- end }}

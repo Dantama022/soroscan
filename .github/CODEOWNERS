@@ -1,0 +1,15 @@
+# Default: every change requires a review from a maintainer.
+* @DokaIzk
+
+# High-risk surfaces get an explicit owner even if defaults change later.
+/.github/ @DokaIzk
+/django-backend/soroscan/settings.py @DokaIzk
+/django-backend/soroscan/urls.py @DokaIzk
+/django-backend/soroscan/throttles.py @DokaIzk
+/django-backend/soroscan/ingest/views.py @DokaIzk
+/django-backend/soroscan/ingest/schema.py @DokaIzk
+/django-backend/soroscan/v1/views.py @DokaIzk
+/sdk/ @DokaIzk
+/k8s/ @DokaIzk
+/helm-chart/ @DokaIzk
+/soroban-contracts/ @DokaIzk

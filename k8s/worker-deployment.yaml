@@ -7,7 +7,6 @@ metadata:
     app: soroscan
     component: worker-high
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: soroscan
@@ -19,9 +18,12 @@ spec:
         component: worker-high
         metrics: "true"
     spec:
+      serviceAccountName: soroscan
+      automountServiceAccountToken: false
       containers:
         - name: worker
           image: soroscan/backend:v1.0.0
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
           args:
             - mkdir -p /tmp/prometheus-multiproc && rm -f /tmp/prometheus-multiproc/* && exec celery -A soroscan worker --loglevel=info --concurrency=8 --queues=high_priority --max-tasks-per-child=1000 --stop-timeout=30
@@ -66,7 +68,6 @@ metadata:
     app: soroscan
     component: worker-default
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: soroscan
@@ -78,9 +79,12 @@ spec:
         component: worker-default
         metrics: "true"
     spec:
+      serviceAccountName: soroscan
+      automountServiceAccountToken: false
       containers:
         - name: worker
           image: soroscan/backend:v1.0.0
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
           args:
             - mkdir -p /tmp/prometheus-multiproc && rm -f /tmp/prometheus-multiproc/* && exec celery -A soroscan worker --loglevel=info --concurrency=4 --queues=default --max-tasks-per-child=1000 --stop-timeout=30
@@ -125,7 +129,6 @@ metadata:
     app: soroscan
     component: worker-low
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: soroscan
@@ -137,9 +140,12 @@ spec:
         component: worker-low
         metrics: "true"
     spec:
+      serviceAccountName: soroscan
+      automountServiceAccountToken: false
       containers:
         - name: worker
           image: soroscan/backend:v1.0.0
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
           args:
             - mkdir -p /tmp/prometheus-multiproc && rm -f /tmp/prometheus-multiproc/* && exec celery -A soroscan worker --loglevel=info --concurrency=4 --queues=low_priority --max-tasks-per-child=1000 --stop-timeout=30
@@ -184,7 +190,6 @@ metadata:
     app: soroscan
     component: worker-backfill
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: soroscan
@@ -196,9 +201,12 @@ spec:
         component: worker-backfill
         metrics: "true"
     spec:
+      serviceAccountName: soroscan
+      automountServiceAccountToken: false
       containers:
         - name: worker-backfill
           image: soroscan/backend:v1.0.0
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
           args:
             - mkdir -p /tmp/prometheus-multiproc && rm -f /tmp/prometheus-multiproc/* && exec celery -A soroscan worker --loglevel=info --concurrency=2 --queues=backfill --max-tasks-per-child=100 --stop-timeout=30

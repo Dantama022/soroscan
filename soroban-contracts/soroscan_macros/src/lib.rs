@@ -77,7 +77,7 @@ fn expand_emit_soroscan_event(input: TokenStream2) -> syn::Result<TokenStream2> 
     Ok(quote! {
         {
             use soroban_sdk::symbol_short;
-            #env_expr.events().publish(
+            (#env_expr).events().publish(
                 (symbol_short!("soroscan"), #event_type),
                 #payload
             )
@@ -134,7 +134,7 @@ fn expand_emit_soroscan_batch(input: TokenStream2) -> syn::Result<TokenStream2> 
     Ok(quote! {
         {
             use soroban_sdk::symbol_short;
-            #env_expr.events().publish(
+            (#env_expr).events().publish(
                 (symbol_short!("soroscan"), symbol_short!("batch")),
                 (#indexer, #event_count, #total_count)
             )
@@ -163,46 +163,48 @@ fn expand_emit_soroscan_batch(input: TokenStream2) -> syn::Result<TokenStream2> 
 #[proc_macro]
 #[allow(clippy::needless_pass_by_value)]
 pub fn soroscan_topics(input: TokenStream) -> TokenStream {
-    let input_str = input.to_string();
-    let identifiers: Vec<&str> = input_str.split(',').map(|s| s.trim()).collect();
+    let parser = Punctuated::<Expr, Token![,]>::parse_terminated;
+    let parsed = match parser.parse2(input.into()) {
+        Ok(punct) => punct,
+        Err(err) => {
+            return syn::Error::new(err.span(), "Expected at least one topic identifier")
+                .to_compile_error()
+                .into();
+        }
+    };
 
-    if identifiers.is_empty() {
-        return syn::Error::new_spanned(
-            proc_macro2::TokenStream::from(input),
+    if parsed.is_empty() {
+        return syn::Error::new(
+            proc_macro2::Span::call_site(),
             "Expected at least one topic identifier",
         )
         .to_compile_error()
         .into();
     }
 
-    // Validate all identifiers are valid Rust identifiers
-    for id in &identifiers {
-        if !is_valid_identifier(id) {
-            return syn::Error::new_spanned(
-                proc_macro2::TokenStream::from(input),
-                format!("Invalid identifier: {}", id),
-            )
-            .to_compile_error()
-            .into();
+    // Every element must be a plain identifier so it can become symbol_short!(ident).
+    let mut identifiers: Vec<syn::Ident> = Vec::with_capacity(parsed.len());
+    for expr in &parsed {
+        match expr {
+            Expr::Path(path) if path.qself.is_none() && path.path.get_ident().is_some() => {
+                identifiers.push(path.path.get_ident().unwrap().clone());
+            }
+            other => {
+                return syn::Error::new_spanned(
+                    other,
+                    "Invalid identifier: topic names must be plain identifiers",
+                )
+                .to_compile_error()
+                .into();
+            }
         }
     }
-
-    // Generate symbol_short! calls for each identifier
-    let symbol_shorts: Vec<proc_macro2::TokenStream> = identifiers
-        .iter()
-        .map(|id| {
-            let id_tokens: proc_macro2::TokenStream = id.parse().unwrap_or_default();
-            quote! {
-                symbol_short!(#id_tokens)
-            }
-        })
-        .collect();
 
     let expanded = quote! {
         {
             use soroban_sdk::{symbol_short, Vec};
             let mut topics = Vec::new(env);
-            #(topics.push_back(#symbol_shorts);)*
+            #(topics.push_back(symbol_short!(#identifiers));)*
             topics
         }
     };
@@ -210,38 +212,41 @@ pub fn soroscan_topics(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-/// Check if a string is a valid Rust identifier
-fn is_valid_identifier(s: &str) -> bool {
-    if s.is_empty() {
-        return false;
-    }
-
-    let first_char = s.chars().next().unwrap();
-    if !first_char.is_alphabetic() && first_char != '_' {
-        return false;
-    }
-
-    s.chars().all(|c| c.is_alphanumeric() || c == '_')
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quote::quote;
 
     #[test]
-    fn test_is_valid_identifier_valid() {
-        assert!(is_valid_identifier("swap"));
-        assert!(is_valid_identifier("transfer_v2"));
-        assert!(is_valid_identifier("_private"));
-        assert!(is_valid_identifier("EVENT_TYPE123"));
+    fn parses_three_plain_args() {
+        let args = parse_args(quote!(env, symbol_short!("swap"), payload)).unwrap();
+        assert_eq!(args.len(), 3);
     }
 
     #[test]
-    fn test_is_valid_identifier_invalid() {
-        assert!(!is_valid_identifier(""));
-        assert!(!is_valid_identifier("123invalid"));
-        assert!(!is_valid_identifier("invalid-type"));
-        assert!(!is_valid_identifier("invalid.type"));
+    fn keeps_tuple_payload_intact() {
+        // A tuple payload contains commas; naive string-splitting would have
+        // seen 5 args and failed. syn keeps it as one expression.
+        let args = parse_args(quote!(env, symbol_short!("swap"), (a, b, c))).unwrap();
+        assert_eq!(args.len(), 3);
+        assert!(matches!(args[2], Expr::Tuple(_)));
+    }
+
+    #[test]
+    fn rejects_wrong_argument_count() {
+        assert!(expand_emit_soroscan_event(quote!(env, payload)).is_err());
+        assert!(expand_emit_soroscan_event(quote!(env, a, b, c)).is_err());
+    }
+
+    #[test]
+    fn rejects_empty_input() {
+        assert!(expand_emit_soroscan_event(quote!()).is_err());
+    }
+
+    #[test]
+    fn parses_four_args_for_batch() {
+        let args = parse_args(quote!(env, indexer, 5, 42)).unwrap();
+        assert_eq!(args.len(), 4);
     }
 
     #[test]

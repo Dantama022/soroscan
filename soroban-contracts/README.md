@@ -2,6 +2,19 @@
 
 This folder contains all Soroban smart contracts for SoroScan.
 
+## Repository layout
+
+```text
+soroban-contracts/
+├── soroscan_core/    # Compiled and deployed contract crate
+└── soroscan_macros/  # Procedural macros used by soroscan_core
+```
+
+`soroscan_core` is the only deployable contract in this repository. The
+uppercase `lib.RS` prototype and the un-manifested `src/` feature snippets were
+removed because they were never part of a Cargo package or CI build. Their
+supported behavior lives in `soroscan_core` and the off-chain indexer.
+
 ## Contracts
 
 ### soroscan_core

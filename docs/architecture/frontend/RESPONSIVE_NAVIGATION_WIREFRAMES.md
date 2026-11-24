@@ -4,7 +4,7 @@ Issue: #966
 
 This document is the design handoff for SoroScan's responsive dashboard navigation at **375 px** and **768 px** viewports. It covers the application navigation drawer, responsive filter controls, and the transformation of event tables into cards.
 
-> Figma prototype: **{{FIGMA_PROTOTYPE_URL}}**
+> Figma prototype: **(link to be added)**
 >
 > The repository SVG frames below are the source-of-truth wireframes and are ready to import into Figma. Replace the placeholder only after the imported frames are wired as a prototype and the share URL is available.
 

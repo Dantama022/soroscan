@@ -114,6 +114,9 @@ page4 = paginator.previous_page()
 Both helpers expose `has_next_page()`, `next_page()`, `previous_page()`, and
 `go_to_page(n)` for Python and TypeScript SDKs.
 
+See [`examples/pagination.py`](examples/pagination.py) for a runnable walkthrough
+that paginates events with both the sync and async helpers.
+
 ### Async Client
 
 ```python
@@ -401,6 +404,29 @@ All error types inherit from `SoroScanError` and include:
 | `status_code` | `int` | HTTP status code (for API errors) |
 | `code` | `str` | Machine-readable error code from the API |
 | `response_data` | `dict` | Optional additional context from the API |
+
+## Webhook Signature Verification
+
+SoroScan signs webhook deliveries with Ed25519. Verify the raw request body
+against the `X-Signature` header before parsing or acting on a delivery:
+
+```python
+import os
+
+from soroscan import verify_webhook_signature
+
+raw_body = request.body  # bytes exactly as received
+signature_header = request.headers.get("X-Signature", "")
+public_key_b64 = os.environ["SOROSCAN_WEBHOOK_PUBLIC_KEY"]
+
+if not verify_webhook_signature(raw_body, signature_header, public_key_b64):
+    return "invalid signature", 401
+```
+
+The public key is available from the `/webhooks/signing-public-key/` endpoint
+and should be cached rather than fetched on every request. See
+[`examples/webhook_verification.py`](examples/webhook_verification.py) for a
+runnable signed-payload verification example.
 
 ## Advanced Usage
 

@@ -1,0 +1,4 @@
+# Optional export formats (Parquet/Avro) used by export_events/import_events.
+# Installed in CI so those tests run; add to the image if you need the formats in production.
+fastavro==1.13.1
+pyarrow==26.0.1

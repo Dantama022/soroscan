@@ -193,8 +193,12 @@ class TestDbPoolStatsFailure:
     """If the DB layer throws, the endpoint must return 503."""
 
     def test_returns_503_on_db_error(self, api_client, admin_user, db_pool_url):
+        # Patch both collectors: which one runs depends on the DB backend.
         with patch(
             "soroscan.meta_views._collect_fallback_pool_stats",
+            side_effect=Exception("Simulated DB failure"),
+        ), patch(
+            "soroscan.meta_views._collect_postgres_pool_stats",
             side_effect=Exception("Simulated DB failure"),
         ):
             api_client.force_authenticate(user=admin_user)

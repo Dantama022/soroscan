@@ -9,6 +9,10 @@ hide_title: false
 
 This page describes recommended backup and disaster recovery procedures for SoroScan.
 
+For the step-by-step restoration procedure, verification checks, and the
+quarterly restore-drill checklist, see the
+[disaster recovery and restore drill playbook](./playbooks/disaster-recovery-restore-drill.md).
+
 ## RTO / RPO targets
 - Example target: RTO = 1 hour, RPO = 15 minutes (adjust to your needs).
 

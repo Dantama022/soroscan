@@ -329,7 +329,11 @@ export async function seedAuth(page: Page) {
 }
 
 export async function clearAuth(page: Page) {
+  // Clear once per tab: init scripts re-run on every navigation, which would
+  // otherwise wipe tokens set by a login flow before the next page loads.
   await page.addInitScript(() => {
+    if (window.sessionStorage.getItem("__e2e_auth_cleared")) return;
+    window.sessionStorage.setItem("__e2e_auth_cleared", "1");
     window.localStorage.removeItem("access_token");
     window.localStorage.removeItem("refresh_token");
   });

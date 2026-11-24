@@ -219,7 +219,7 @@ class ActiveContractsGaugeTest(TestCase):
         user = _make_user("gaugeuser")
         contract = _make_contract(
             user,
-            contract_id="CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBQ",
+            contract_id="CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBQ",
         )
 
         _upsert_contract_event(
@@ -296,7 +296,7 @@ class TaskDurationHistogramTest(TestCase):
         user = _make_user("backfilluser")
         contract = _make_contract(
             user,
-            contract_id="CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCQ",
+            contract_id="CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCQ",
         )
 
         with patch("soroscan.ingest.tasks.SorobanClient") as mock_client_cls:

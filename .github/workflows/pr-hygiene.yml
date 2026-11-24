@@ -1,0 +1,29 @@
+name: PR Hygiene
+
+# Rejects pull requests that smuggle in build artifacts (e.g. committed
+# __pycache__/*.pyc), binaries, private keys, real .env files, or dangerous
+# workflow constructs (pull_request_target, write-all), and blocks PRs that
+# delete the entire CI suite. See scripts/check_pr_hygiene.py.
+on:
+  pull_request:
+    branches: [main, dev]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: python3 scripts/check_pr_hygiene.py --base "$BASE_SHA" --head "$HEAD_SHA"

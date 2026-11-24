@@ -101,6 +101,90 @@ class TestSnapshotAPI:
         assert response.data[0]["ledger_sequence"] == 2000
         assert len(response.data[0]["changes"]) >= 0
 
+    def _url_for(self, contract):
+        return reverse("contract-snapshots", kwargs={"pk": contract.pk})
+
+    def _seeded_client_and_contract(self):
+        user = UserFactory()
+        contract = TrackedContractFactory(owner=user, last_indexed_ledger=3000)
+        create_contract_snapshot(contract, 1000, {"v": 1})
+        create_contract_snapshot(contract, 2000, {"v": 2})
+        create_contract_snapshot(contract, 3000, {"v": 3})
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return client, contract
+
+    def test_ledger_min_only_returns_snapshots_at_or_above(self):
+        client, contract = self._seeded_client_and_contract()
+        response = client.get(self._url_for(contract), {"ledger_min": 2000})
+
+        assert response.status_code == status.HTTP_200_OK
+        sequences = {row["ledger_sequence"] for row in response.data}
+        assert sequences == {2000, 3000}
+
+    def test_ledger_max_only_returns_snapshots_at_or_below(self):
+        client, contract = self._seeded_client_and_contract()
+        response = client.get(self._url_for(contract), {"ledger_max": 2000})
+
+        assert response.status_code == status.HTTP_200_OK
+        sequences = {row["ledger_sequence"] for row in response.data}
+        assert sequences == {1000, 2000}
+
+    def test_non_numeric_ledger_min_returns_400(self):
+        client, contract = self._seeded_client_and_contract()
+        response = client.get(self._url_for(contract), {"ledger_min": "abc"})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "ledger_min" in response.data
+
+    def test_non_numeric_ledger_max_returns_400(self):
+        client, contract = self._seeded_client_and_contract()
+        response = client.get(self._url_for(contract), {"ledger_max": "abc"})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "ledger_max" in response.data
+
+    def test_empty_ledger_bound_returns_400(self):
+        # A whitespace-only value used to raise ValueError out of int() and
+        # surface as a 500; it must be a 400 now.
+        client, contract = self._seeded_client_and_contract()
+        response = client.get(self._url_for(contract), {"ledger_min": "   "})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "ledger_min" in response.data
+
+    def test_negative_ledger_bound_returns_400(self):
+        client, contract = self._seeded_client_and_contract()
+        response = client.get(self._url_for(contract), {"ledger_min": -5})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "ledger_min" in response.data
+
+    def test_ledger_min_greater_than_max_returns_400(self):
+        client, contract = self._seeded_client_and_contract()
+        response = client.get(
+            self._url_for(contract), {"ledger_min": 2500, "ledger_max": 1500}
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "ledger_min" in response.data
+
+    def test_huge_ledger_bound_beyond_bigint_returns_400(self):
+        # Larger than PostgreSQL bigint max; must be rejected with 400 rather
+        # than blowing up at query time as a 500.
+        client, contract = self._seeded_client_and_contract()
+        response = client.get(self._url_for(contract), {"ledger_min": 2**63})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "ledger_min" in response.data
+
+    def test_omitted_bounds_return_all_snapshots(self):
+        client, contract = self._seeded_client_and_contract()
+        response = client.get(self._url_for(contract))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 3
+
 
 @pytest.mark.django_db
 class TestSnapshotGraphQL:

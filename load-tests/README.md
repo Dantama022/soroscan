@@ -23,6 +23,30 @@ K6_REPORT_PATH=load-tests/results/scenarios-summary.json \
   k6 run load-tests/k6/scenarios.js
 ```
 
+## Soak & stress
+
+`load-tests/k6/soak.js` adds sustained-load and stress-ramp profiles that the
+smoke and short scenario scripts do not cover. Select a profile with `K6_PROFILE`:
+
+```bash
+# Soak (default): sustained moderate load for 10m to surface latency drift
+mkdir -p load-tests/results
+k6 run load-tests/k6/soak.js
+
+# Shorter soak for a quick local check
+K6_PROFILE=soak K6_SOAK_VUS=10 K6_SOAK_DURATION=1m k6 run load-tests/k6/soak.js
+
+# Stress ramp: push VUs up to find the breaking point
+K6_PROFILE=stress K6_STRESS_VUS=100 k6 run load-tests/k6/soak.js
+```
+
+The soak profile ramps to `K6_SOAK_VUS` and holds them for `K6_SOAK_DURATION`,
+tracking `http_req_duration` and `iteration_duration` p95; a rising trend over
+the sustained run signals degradation that usually tracks server-side
+memory/resource leaks (monitor those on the host separately). The stress
+profile ramps VUs to `K6_STRESS_VUS`, holds, then ramps down. Thresholds are
+CI-safe defaults, not product SLOs.
+
 ## Environment variables
 
 | Variable | Default | Description |
@@ -31,6 +55,11 @@ K6_REPORT_PATH=load-tests/results/scenarios-summary.json \
 | `K6_VUS` | `5` | Virtual users / smoke VUs |
 | `K6_DURATION` | `30s` / `45s` | Steady-state duration |
 | `K6_RAMP_UP` | `10s` | Ramp-up for the health scenario |
+| `K6_PROFILE` | `soak` | `soak` or `stress` profile for `soak.js` |
+| `K6_SOAK_VUS` | `10` | Sustained VUs for the soak profile |
+| `K6_SOAK_DURATION` | `10m` | Sustained duration for the soak profile |
+| `K6_STRESS_VUS` | `100` | Peak VUs for the stress ramp |
+| `K6_RAMP_DOWN` | `1m` | Stress profile ramp-down duration |
 | `K6_REPORT_PATH` | `load-tests/results/*.json` | JSON summary output |
 | `K6_USERNAME` / `K6_PASSWORD` | empty | JWT via `POST /api/token/` |
 | `K6_API_TOKEN` | empty | Bearer token if you already have one |
@@ -56,6 +85,8 @@ not fabricated product SLOs.
 - Pull requests: smoke test + static config/safety tests.
 - Nightly schedule and `workflow_dispatch` (`suite=scenarios`): full workflow
   suite. Reports are uploaded as artifacts.
+- `load-tests/k6/soak.js` (soak/stress) is run on demand; the static config
+  tests below validate its profiles and production guard on every PR.
 
 ```bash
 python -m pytest -q load-tests/tests

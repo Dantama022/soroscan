@@ -16,3 +16,24 @@ scripts/push_new_wave_issues.py
 backlogs/
 scripts/push_next_wave_65.py
 scripts/repush_clean_wave_55.py
+
+# Python bytecode / caches (never commit compiled artifacts)
+__pycache__/
+*.py[cod]
+*$py.class
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local environment files (commit .env.example only)
+.env
+.env.*
+!.env.example
+
+# OS / editor artifacts
+.DS_Store
+Thumbs.db
+*.swp
